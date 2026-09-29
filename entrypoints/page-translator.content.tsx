@@ -6,6 +6,7 @@ import { orderedTranslatedImages } from '../lib/artifacts/translated-images';
 import type { PageDomBridge } from '../lib/page-images/bridge';
 import { findCandidateElement, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
 import { loadApiSettings } from '../lib/storage/settings';
+import { optionalMessage } from '../lib/i18n';
 import './popup/style.css';
 import '../assets/page-translator.css';
 
@@ -111,7 +112,7 @@ export default defineContentScript({
           container.style.setProperty('position', 'fixed', 'important');
           container.style.setProperty('inset', '0', 'important');
           container.style.setProperty('pointer-events', 'none', 'important');
-          container.lang = browser.i18n.getMessage('htmlLanguage') || 'en';
+          container.lang = optionalMessage('htmlLanguage') || 'en';
           const rootElement = document.createElement('div');
           rootElement.id = 'root';
           container.append(rootElement);
