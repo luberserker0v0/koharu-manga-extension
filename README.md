@@ -18,9 +18,35 @@ A WXT browser extension for the Manga Translation Backend. It talks only to the 
 - English and Traditional Chinese extension i18n
 - per-site floating page translation with lazy-image scanning and review
 - optional approved ComicCrawler adapters with safe generic DOM fallback
-- single-image inline replacement with original-image restoration
+- ordered multi-image inline replacement through the backend `translated-images` API, with original-image restoration
 
 The API and view models retain mode types for `reference_style`, `local_style`, and `learning_style`; only `quick` is exposed in the UI today.
+
+## Prerequisites
+
+### Manga Translation Backend (required)
+
+Run [koharu-manga-agent](https://github.com/luberserker0v0/koharu-manga-agent) before using translation features. By default, the extension expects its browser REST API at:
+
+```text
+http://127.0.0.1:4001/api/v1
+```
+
+The backend must report a healthy `/health` response and a ready `/api/v1/runtime/status`. It owns all Koharu and AO communication, uploads, jobs, artifacts, and translated-image extraction. The extension never connects to Koharu or AO directly and never reads backend or Docker filesystem paths.
+
+If the backend requires authentication, configure its optional Bearer token in the extension settings. A different backend URL can also be configured there.
+
+### ComicCrawler (optional)
+
+Run [ComicCrawler](https://github.com/luberserker0v0/comic-crawler) to use approved site adapters, canonical chapter recognition, and ordered chapter-image discovery. The default service URL is:
+
+```text
+http://127.0.0.1:4100
+```
+
+Enable ComicCrawler in the extension settings and configure Basic-auth credentials when required. The integration uses ComicCrawler's REST API, including `POST /api/adapters/chapter-images`; it never reads crawler output directories or executes adapter drafts. When ComicCrawler is disabled, unavailable, or has no matching adapter, the extension falls back to generic page image detection.
+
+For extension development, install Node.js and npm. Chrome or Edge is required to load and test the MV3 build.
 
 ## Development
 
