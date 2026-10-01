@@ -65,6 +65,19 @@ npm run build
 
 Load `.output/chrome-mv3` as an unpacked extension after a build. The default setting is `http://127.0.0.1:4001/api/v1`; change it in the extension settings when the backend is elsewhere. The backend must allow the installed extension origin through CORS.
 
+## Releases
+
+The `Release extension` GitHub Actions workflow verifies the project, packages Chrome and Edge ZIP files, generates `SHA256SUMS.txt`, and attaches all three files to a GitHub Release.
+
+To publish the version declared in `package.json`, push its matching `v`-prefixed tag:
+
+```sh
+git tag -a v0.1.0 -m "Koharu Manga Companion v0.1.0"
+git push origin v0.1.0
+```
+
+The workflow can also be started from **Actions → Release extension → Run workflow** with the matching tag. A release fails before publishing if the requested tag does not exactly match the `package.json` version.
+
 ## Architecture
 
 - `lib/api`: typed transport, centralized errors, raw upload, SSE parsing/reconciliation
