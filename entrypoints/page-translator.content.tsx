@@ -7,6 +7,7 @@ import type { PageDomBridge } from '../lib/page-images/bridge';
 import { findCandidateElement, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
 import { loadApiSettings } from '../lib/storage/settings';
 import { optionalMessage } from '../lib/i18n';
+import { isExtensionContextInvalidated } from '../lib/extension-context';
 import './popup/style.css';
 import '../assets/page-translator.css';
 
@@ -17,6 +18,10 @@ export default defineContentScript({
   async main(ctx) {
     const pageWindow = window as typeof window & { __koharuMangaCompanionMounted__?: boolean };
     if (pageWindow.__koharuMangaCompanionMounted__) return;
+    const suppressInvalidatedRejection = (event: PromiseRejectionEvent) => {
+      if (isExtensionContextInvalidated(event.reason)) event.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', suppressInvalidatedRejection);
     pageWindow.__koharuMangaCompanionMounted__ = true;
 
     const detector = new GenericDomImageDetector();
@@ -126,13 +131,15 @@ export default defineContentScript({
       });
       ui.mount();
       ctx.onInvalidated(() => {
-        browser.runtime.onMessage.removeListener(runtimeListener);
+        try { browser.runtime.onMessage.removeListener(runtimeListener); } catch { /* invalidated */ }
         ui.remove();
         pageWindow.__koharuMangaCompanionMounted__ = false;
       });
     } catch (error) {
-      browser.runtime.onMessage.removeListener(runtimeListener);
+      try { browser.runtime.onMessage.removeListener(runtimeListener); } catch { /* invalidated */ }
       pageWindow.__koharuMangaCompanionMounted__ = false;
+      if (isExtensionContextInvalidated(error)) return;
+      window.removeEventListener('unhandledrejection', suppressInvalidatedRejection);
       throw error;
     }
   },

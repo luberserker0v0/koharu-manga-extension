@@ -5,12 +5,18 @@ interface ExtensionI18n {
 }
 
 function i18nApi(): ExtensionI18n | null {
-  const wxtI18n = extensionBrowser?.i18n as ExtensionI18n | undefined;
-  if (typeof wxtI18n?.getMessage === 'function') return wxtI18n;
-  const chromeI18n = (globalThis as typeof globalThis & {
-    chrome?: { i18n?: ExtensionI18n };
-  }).chrome?.i18n;
-  return typeof chromeI18n?.getMessage === 'function' ? chromeI18n : null;
+  try {
+    const wxtI18n = extensionBrowser?.i18n as ExtensionI18n | undefined;
+    if (typeof wxtI18n?.getMessage === 'function') return wxtI18n;
+  } catch { /* The old content-script context was invalidated. */ }
+  try {
+    const chromeI18n = (globalThis as typeof globalThis & {
+      chrome?: { i18n?: ExtensionI18n };
+    }).chrome?.i18n;
+    return typeof chromeI18n?.getMessage === 'function' ? chromeI18n : null;
+  } catch {
+    return null;
+  }
 }
 
 export function t(key: string, substitutions?: string | string[]): string {
