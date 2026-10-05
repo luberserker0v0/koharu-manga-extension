@@ -33,7 +33,6 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .page-access-strip button { border: 0; color: #fff; background: #ac4c44; border-radius: 7px; padding: 6px 8px; font-size: 10px; font-weight: 700; }
 .page-access-strip small { color: #9a3933; }
 .panel { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; padding: 17px; border: 1px solid #ddd4c6; border-radius: 17px; background: rgb(255 253 248 / 88%); box-shadow: 0 9px 24px rgb(72 61 45 / 7%); }
-.hero-panel { padding: 20px; }
 .panel h2 { min-width: 0; margin: 2px 0 8px; overflow-wrap: anywhere; font-family: Georgia, "Times New Roman", serif; font-size: 20px; line-height: 1.2; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .panel-heading > :first-child { min-width: 0; }
@@ -41,21 +40,12 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .eyebrow { margin: 0; color: #ae4d45; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
 .muted { color: #766f65; font-size: 12px; line-height: 1.55; margin: 0 0 14px; }
 .content-stack, .job-stack { display: grid; gap: 12px; }
-.drop-zone { display: grid; width: 100%; place-items: center; gap: 6px; min-height: 142px; padding: 18px; border: 1.5px dashed #c9b8a4; border-radius: 14px; background: #faf6ef; color: #4d4942; text-align: center; }
-.drop-zone:hover { border-color: #b65b51; background: #fff9f2; }
-.drop-zone strong { font-size: 13px; }
-.drop-zone small { max-width: 100%; overflow: hidden; color: #8a8175; font-size: 10px; line-height: 1.45; text-overflow: ellipsis; }
-.drop-icon { display: grid; width: 35px; height: 35px; place-items: center; border-radius: 50%; color: #b34f47; background: #f1dfd8; font-size: 24px; font-weight: 300; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
 .primary-button, .secondary-button { min-height: 38px; padding: 9px 14px; border-radius: 10px; font-size: 12px; font-weight: 750; }
 .primary-button { flex: 1; border: 1px solid #a9463e; color: #fff; background: linear-gradient(180deg, #c35b51, #a9473f); box-shadow: 0 5px 13px rgb(169 71 63 / 18%); }
 .secondary-button { border: 1px solid #d4c9ba; color: #5d574e; background: #f8f4ed; }
 .danger-button { color: #a23e38; }
 .cleanup-status { align-self: center; color: #488568; font-size: 10px; }
-.progress-block { margin-top: 12px; }
-.progress-copy { display: flex; justify-content: space-between; gap: 8px; color: #71695f; font-size: 10px; }
-.progress-copy span:first-child { max-width: 58%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-progress { width: 100%; height: 6px; margin-top: 5px; accent-color: #ba554c; }
 .notice { display: flex; flex-direction: column; gap: 3px; margin: 10px 0; padding: 10px 11px; border-radius: 9px; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 .notice-error { color: #8e342e; background: #f8dfdc; border: 1px solid #ecc5c0; }
 .notice-success { color: #346b50; background: #e2f0e7; border: 1px solid #c4decf; }
@@ -64,7 +54,6 @@ progress { width: 100%; height: 6px; margin-top: 5px; accent-color: #ba554c; }
 .count-badge { flex: 0 0 auto; padding: 4px 8px; border-radius: 99px; color: #815048; background: #f1dfd8; font-size: 10px; font-weight: 750; }
 .preflight-summary { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
 .preflight-summary span { padding: 4px 7px; border-radius: 99px; color: #6f675c; background: #eee8df; font-size: 9px; }
-.upload-order-list { max-height: 190px; overflow-y: auto; }
 .image-order-list, .artifact-list, .event-list { list-style: none; padding: 0; margin: 12px 0 0; }
 .image-order-list { display: grid; gap: 6px; }
 .image-order-list li { display: flex; align-items: center; gap: 9px; min-height: 43px; padding: 7px 8px; border: 1px solid #e5ddd1; border-radius: 10px; background: #fcfaf6; }
@@ -157,7 +146,6 @@ input:focus, select:focus { border-color: #b75a51; box-shadow: 0 0 0 3px rgb(183
 .select-with-spinner { position: relative; display: block; }
 .select-with-spinner select { padding-right: 34px; }
 .inline-spinner { position: absolute; top: 50%; right: 10px; width: 15px; height: 15px; margin-top: -8px; border: 2px solid #ded5c8; border-top-color: #b85249; border-radius: 50%; pointer-events: none; animation: spin .8s linear infinite; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 footer { padding: 14px 4px 1px; color: #91887d; text-align: center; font-size: 9px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

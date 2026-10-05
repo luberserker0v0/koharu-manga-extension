@@ -6,7 +6,6 @@ import { PageAccessPanel } from '../../components/PageAccessPanel';
 import { PreflightReview } from '../../components/PreflightReview';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { TranslationForm } from '../../components/TranslationForm';
-import { UploadPanel } from '../../components/UploadPanel';
 import { useJobMonitor } from '../../hooks/useJobMonitor';
 import { useSettings } from '../../hooks/useSettings';
 import { useTranslationWorkflow } from '../../hooks/useTranslationWorkflow';
@@ -119,7 +118,6 @@ export function App() {
     return <main className="app-shell loading-shell"><div className="spinner" /><span>{t('loadingExtension')}</span></main>;
   }
 
-  const busy = ['checking', 'uploading', 'preflighting'].includes(workflow.phase);
   const connectionState = workflow.runtime?.backend.status === 'ready' && workflow.runtime?.koharu.status === 'running';
 
   return (
@@ -196,12 +194,10 @@ export function App() {
               />
             </div>
           ) : (
-            <UploadPanel
-              busy={busy}
-              progress={workflow.progress}
-              onStart={(files) => void workflow.startUpload(files, true)}
-              onCancel={workflow.cancelUpload}
-            />
+            <div className="empty-state">
+              <p><strong>{t('popupEmptyTitle')}</strong></p>
+              <p className="muted">{t('popupEmptyDescription')}</p>
+            </div>
           )}
           <JobHistory
             activeJobId={workflow.workflow?.jobId}
