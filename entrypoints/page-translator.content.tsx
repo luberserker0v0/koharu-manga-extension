@@ -5,6 +5,7 @@ import { BackendClient } from '../lib/api/backend-client';
 import { orderedTranslatedImages } from '../lib/artifacts/translated-images';
 import type { PageDomBridge } from '../lib/page-images/bridge';
 import { findCandidateElement, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
+import { isDocumentFullscreen } from '../lib/page-images/fullscreen';
 import { loadApiSettings } from '../lib/storage/settings';
 import { optionalMessage } from '../lib/i18n';
 import { isExtensionContextInvalidated } from '../lib/extension-context';
@@ -123,10 +124,23 @@ export default defineContentScript({
           container.append(rootElement);
           const root = ReactDOM.createRoot(rootElement);
           root.render(<React.StrictMode><PageTranslatorApp domBridge={bridge} /></React.StrictMode>);
-          return root;
+          const syncFullscreenVisibility = () => {
+            shadowHost.style.setProperty(
+              'display',
+              isDocumentFullscreen(document) ? 'none' : 'block',
+              'important',
+            );
+          };
+          document.addEventListener('fullscreenchange', syncFullscreenVisibility);
+          document.addEventListener('webkitfullscreenchange', syncFullscreenVisibility);
+          syncFullscreenVisibility();
+          return { root, syncFullscreenVisibility };
         },
-        onRemove(root) {
-          root?.unmount();
+        onRemove(mounted) {
+          if (!mounted) return;
+          document.removeEventListener('fullscreenchange', mounted.syncFullscreenVisibility);
+          document.removeEventListener('webkitfullscreenchange', mounted.syncFullscreenVisibility);
+          mounted.root.unmount();
         },
       });
       ui.mount();
