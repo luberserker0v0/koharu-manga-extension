@@ -152,6 +152,8 @@
   "confirmDeleteUpload": { "message": "Delete the retained source upload? Post-edit and re-export workflows may still need these images." },
   "sourceUploadDeleted": { "message": "Source upload deleted" },
   "newTranslation": { "message": "Start another translation" },
+  "requeueTranslation": { "message": "Same images, new settings" },
+  "requeueingTranslation": { "message": "Reloading preflight…" },
   "jobState_queued": { "message": "Queued" },
   "jobState_waiting": { "message": "Waiting" },
   "jobState_running": { "message": "Running" },
@@ -249,4 +251,5 @@
   ,"warning_comicCrawler_api": { "message": "ComicCrawler rejected image discovery; using generic page scanning." }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler returned an unsupported response; using generic page scanning." }
   ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler's chapter-image API is not installed; using generic page scanning." }
+  ,"warning_canvas_snapshot": { "message": "Canvas pages are snapshotted as PNG. A tainted canvas may fail to export." }
 }

@@ -15,6 +15,6 @@ This extension adopts the useful product pattern—a discoverable floating actio
 
 - Site access is optional and granted per origin instead of declaring blanket host access.
 - Approved ComicCrawler REST adapters are preferred over extension-bundled site scraping rules.
-- The generic v1 detector handles loaded HTML `<img>` elements and bounded lazy-page scrolling; canvas, CSS backgrounds, PDFs, and browser-internal pages are deferred.
+- The generic detector handles loaded HTML `<img>` elements, `<picture>` sources, shadow-DOM images, video posters, CSS background images, and canvas snapshots through bounded lazy-page scrolling; PDFs and browser-internal pages remain unsupported.
 - Single- and multi-image results can be applied inline through the backend's ordered `translated-images` API; the extension never guesses from ZIP order or filenames.
 - Koharu, AO, backend files, ComicCrawler files, and Docker volumes are never accessed directly.

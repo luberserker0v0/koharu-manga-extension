@@ -70,6 +70,9 @@ jobs:
       - name: Package Edge extension
         run: npx --no-install wxt zip -b edge
 
+      - name: Package Firefox extension
+        run: npm run zip:firefox
+
       - name: Prepare release assets
         shell: bash
         env:
@@ -79,6 +82,8 @@ jobs:
           mkdir -p release
           cp ".output/koharu-manga-companion-${VERSION}-chrome.zip" release/
           cp ".output/koharu-manga-companion-${VERSION}-edge.zip" release/
+          cp ".output/koharu-manga-companion-${VERSION}-firefox.zip" release/
+          cp ".output/koharu-manga-companion-${VERSION}-sources.zip" release/
           cd release
           sha256sum ./*.zip > SHA256SUMS.txt
 

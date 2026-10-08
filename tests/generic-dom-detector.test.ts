@@ -21,6 +21,10 @@ function mangaImage(src: string, width = 800, height = 1200): HTMLImageElement {
   return image;
 }
 
+function sizedRect(width: number, height: number): DOMRect {
+  return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) } as DOMRect;
+}
+
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
@@ -52,6 +56,76 @@ describe('GenericDomImageDetector', () => {
     const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     await new GenericDomImageDetector(limits).detect(location.href, { deep: true });
     expect(scroll).toHaveBeenLastCalledWith({ left: 12, top: 34, behavior: 'auto' });
+  });
+
+  it('reads extended lazy-loading attributes', async () => {
+    const image = document.createElement('img');
+    image.setAttribute('data-original', 'https://cdn.test/lazy-1.jpg');
+    Object.defineProperties(image, {
+      complete: { value: true, configurable: true },
+      naturalWidth: { value: 800, configurable: true },
+      naturalHeight: { value: 1200, configurable: true },
+    });
+    image.getBoundingClientRect = () => sizedRect(800, 1200);
+    document.body.append(image);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images.map((item) => item.fileName)).toEqual(['lazy-1.jpg']);
+  });
+
+  it('detects picture source entries', async () => {
+    const picture = document.createElement('picture');
+    const source = document.createElement('source');
+    source.setAttribute('srcset', 'https://cdn.test/pic-1.webp 1x, https://cdn.test/pic-1@2x.webp 2x');
+    const fallback = document.createElement('img');
+    fallback.getBoundingClientRect = () => sizedRect(800, 1200);
+    picture.append(source, fallback);
+    document.body.append(picture);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images.map((item) => item.sourceUrl)).toEqual(['https://cdn.test/pic-1.webp']);
+  });
+
+  it('detects shadow-DOM images', async () => {
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.append(mangaImage('https://cdn.test/shadow-1.jpg'));
+    document.body.append(host);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images.map((item) => item.fileName)).toEqual(['shadow-1.jpg']);
+  });
+
+  it('detects CSS background images with a dedicated target kind', async () => {
+    const panel = document.createElement('div');
+    panel.style.backgroundImage = 'url("https://cdn.test/bg-1.jpg")';
+    panel.getBoundingClientRect = () => sizedRect(800, 1200);
+    document.body.append(panel);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0]?.sourceUrl).toBe('https://cdn.test/bg-1.jpg');
+    expect(result.images[0]?.targetKind).toBe('css-background');
+  });
+
+  it('detects video posters', async () => {
+    const video = document.createElement('video');
+    video.setAttribute('poster', 'https://cdn.test/poster-1.jpg');
+    video.getBoundingClientRect = () => sizedRect(800, 1200);
+    document.body.append(video);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0]?.targetKind).toBe('video');
+  });
+
+  it('snapshots large canvases and warns about them', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 1200;
+    canvas.getBoundingClientRect = () => sizedRect(800, 1200);
+    document.body.append(canvas);
+    const result = await new GenericDomImageDetector(limits).detect(location.href);
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0]?.targetKind).toBe('canvas');
+    expect(result.images[0]?.sourceUrl.startsWith('canvas:')).toBe(true);
+    expect(result.images[0]?.fileName).toBe('canvas-001.png');
+    expect(result.warnings).toContain('canvas_snapshot');
   });
 
   it('honors cancellation before scanning', async () => {

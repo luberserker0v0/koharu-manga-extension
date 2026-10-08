@@ -4,23 +4,23 @@ A WXT browser extension for the Manga Translation Backend. It talks only to the 
 
 ## Current scope
 
-- Quick Translation workflow with health and runtime readiness checks
-- raw-byte image upload with per-batch progress and cancellation
-- source preflight review and explicit page reordering
+- Quick-only Translation workflow with health and runtime readiness checks (`translationMode: 'quick'`, `qualityCheck: false`)
+- Page-driven raw-byte image upload with per-batch progress and cancellation (new translations start from the on-page translator, not the popup)
+- Page image review (exclude/reorder) before upload, plus source preflight review and explicit page reordering
 - `202 Accepted` job creation followed by SSE-first monitoring
 - GET reconciliation, reconnection, and polling fallback
-- persisted events, diagnostics, child-job failures, and artifact downloads
-- explicit failed-job retry/resume with new Job ID tracking
-- resumable local workflow identifiers (`uploadId`, `preflightId`, `jobId`)
-- local chapter Job history and explicit retained-upload cleanup
-- local file validation plus pre-upload natural ordering and correction
-- configurable versioned API URL and optional Bearer token
+- Persisted events, diagnostics, child-job failures, and artifact downloads
+- Explicit failed-job retry/resume with new Job ID tracking
+- Re-export from a retained preflight: queue another job from the same images with different format, language, or provider without re-uploading
+- Resumable local workflow identifiers (`uploadId`, `preflightId`, `jobId`)
+- Local chapter Job history and explicit retained-upload cleanup
+- Configurable versioned API URL and optional Bearer token
 - English and Traditional Chinese extension i18n
-- per-site floating page translation with lazy-image scanning and review
-- optional approved ComicCrawler adapters with safe generic DOM fallback
-- ordered multi-image inline replacement through the backend `translated-images` API, with original-image restoration
+- Per-site floating page translation with lazy-image scanning and review, covering `<img>`, `<picture>` sources, shadow-DOM images, video posters, CSS background images, and canvas snapshots; PDFs and browser-internal pages are unsupported
+- Optional approved ComicCrawler adapters with safe generic DOM fallback
+- Ordered multi-image inline replacement through the backend `translated-images` API, with original-image restoration
 
-The API and view models retain mode types for `reference_style`, `local_style`, and `learning_style`; only `quick` is exposed in the UI today.
+The popup is a monitor/review/history surface. When no job or preflight is active it shows an empty state that directs users to the on-page translator.
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ Load `.output/chrome-mv3` as an unpacked extension after a build. The default se
 
 ## Releases
 
-The `Release extension` GitHub Actions workflow verifies the project, packages Chrome and Edge ZIP files, generates `SHA256SUMS.txt`, and attaches all three files to a GitHub Release.
+The `Release extension` GitHub Actions workflow verifies the project, packages Chrome, Edge, and Firefox ZIP files (plus the Firefox sources bundle), generates `SHA256SUMS.txt`, and attaches all files to a GitHub Release.
 
 To publish the version declared in `package.json`, push its matching `v`-prefixed tag:
 

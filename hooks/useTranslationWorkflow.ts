@@ -228,6 +228,32 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
     setPhase('monitoring');
   }, [workflow]);
 
+  const requeueFromPreflight = useCallback(async () => {
+    if (!client || !workflow?.preflightId) return;
+    operation.current?.abort();
+    const controller = new AbortController();
+    operation.current = controller;
+    setError(null);
+    setPhase('checking');
+    try {
+      const restored = await client.getPreflight(workflow.preflightId, controller.signal);
+      const { jobId: _dropped, ...rest } = workflow;
+      void _dropped;
+      const next: StoredWorkflow = { ...rest, updatedAt: new Date().toISOString() };
+      delete next.jobId;
+      setRestored(false);
+      setWorkflow(next);
+      setPreflight(restored);
+      await saveWorkflow(next);
+      setPhase('review');
+    } catch (nextError) {
+      setError(nextError);
+      setPhase(workflow.jobId ? 'monitoring' : 'review');
+    } finally {
+      operation.current = null;
+    }
+  }, [client, workflow]);
+
   const resumeWorkflow = useCallback(async (saved: StoredWorkflow) => {
     operation.current?.abort();
     setWorkflow(saved);
@@ -263,6 +289,7 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
     createJob,
     reset,
     replaceJob,
+    requeueFromPreflight,
     resumeWorkflow,
     markUploadDeleted,
   };

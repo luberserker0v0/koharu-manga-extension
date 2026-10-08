@@ -4,7 +4,7 @@ import { PageTranslatorApp } from '../components/PageTranslatorApp';
 import { BackendClient } from '../lib/api/backend-client';
 import { orderedTranslatedImages } from '../lib/artifacts/translated-images';
 import type { PageDomBridge } from '../lib/page-images/bridge';
-import { findCandidateElement, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
+import { findCandidateElement, findCandidateTarget, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
 import { isDocumentFullscreen } from '../lib/page-images/fullscreen';
 import { loadApiSettings } from '../lib/storage/settings';
 import { optionalMessage } from '../lib/i18n';
@@ -26,27 +26,121 @@ export default defineContentScript({
     pageWindow.__koharuMangaCompanionMounted__ = true;
 
     const detector = new GenericDomImageDetector();
-    const replacements = new Map<HTMLImageElement, { src: string; srcset: string; sizes: string }>();
+    type SavedState =
+      | { kind: 'img'; src: string; srcset: string; sizes: string }
+      | { kind: 'canvas'; dataUrl: string | null }
+      | { kind: 'video'; poster: string | null }
+      | { kind: 'css'; backgroundImage: string };
+    const replacements = new Map<Element, SavedState>();
+
+    const loadImage = (url: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('inline_replacement_incomplete'));
+      image.src = url;
+    });
 
     const bridge: PageDomBridge = {
       detect: (deep, signal) => detector.detect(location.href, { deep, signal }),
       async apply(candidate, url) {
-        const element = findCandidateElement(candidate);
-        if (!element) return false;
-        if (!replacements.has(element)) {
-          replacements.set(element, { src: element.src, srcset: element.srcset, sizes: element.sizes });
+        const target = findCandidateTarget(candidate) ?? findCandidateElement(candidate);
+        if (!target) return false;
+        const kind = candidate.targetKind
+          ?? (target instanceof HTMLCanvasElement ? 'canvas' : undefined)
+          ?? (target instanceof HTMLVideoElement ? 'video' : undefined)
+          ?? 'img';
+        if (target instanceof HTMLImageElement && (kind === 'img' || kind === undefined)) {
+          if (!replacements.has(target)) {
+            replacements.set(target, { kind: 'img', src: target.src, srcset: target.srcset, sizes: target.sizes });
+          }
+          target.srcset = '';
+          target.src = url;
+          return true;
         }
-        element.srcset = '';
-        element.src = url;
-        return true;
+        if (target instanceof HTMLCanvasElement && kind === 'canvas') {
+          const context = target.getContext('2d');
+          if (!context) return false;
+          if (!replacements.has(target)) {
+            let dataUrl: string | null = null;
+            try { dataUrl = target.toDataURL('image/png'); } catch { dataUrl = null; }
+            replacements.set(target, { kind: 'canvas', dataUrl });
+          }
+          const image = await loadImage(url).catch(() => null);
+          if (!image) return false;
+          const scale = Math.max(target.width / image.naturalWidth, target.height / image.naturalHeight);
+          const width = image.naturalWidth * scale;
+          const height = image.naturalHeight * scale;
+          context.clearRect(0, 0, target.width, target.height);
+          context.drawImage(image, (target.width - width) / 2, (target.height - height) / 2, width, height);
+          return true;
+        }
+        if (target instanceof HTMLVideoElement && kind === 'video') {
+          if (!replacements.has(target)) {
+            replacements.set(target, { kind: 'video', poster: target.getAttribute('poster') });
+          }
+          target.setAttribute('poster', url);
+          return true;
+        }
+        if ((kind === 'css-background' || !(target instanceof HTMLImageElement)) && target instanceof HTMLElement) {
+          if (!replacements.has(target)) {
+            replacements.set(target, { kind: 'css', backgroundImage: target.style.backgroundImage });
+          }
+          target.style.backgroundImage = `url("${url}")`;
+          return true;
+        }
+        return false;
       },
       async restore() {
         for (const [element, original] of replacements) {
-          element.src = original.src;
-          element.srcset = original.srcset;
-          element.sizes = original.sizes;
+          if (original.kind === 'img' && element instanceof HTMLImageElement) {
+            element.src = original.src;
+            element.srcset = original.srcset;
+            element.sizes = original.sizes;
+          } else if (original.kind === 'canvas' && element instanceof HTMLCanvasElement) {
+            const context = element.getContext('2d');
+            if (context && original.dataUrl) {
+              const image = await loadImage(original.dataUrl).catch(() => null);
+              if (image) {
+                context.clearRect(0, 0, element.width, element.height);
+                context.drawImage(image, 0, 0, element.width, element.height);
+              }
+            }
+          } else if (original.kind === 'video' && element instanceof HTMLVideoElement) {
+            if (original.poster === null) element.removeAttribute('poster');
+            else element.setAttribute('poster', original.poster);
+          } else if (original.kind === 'css' && element instanceof HTMLElement) {
+            element.style.backgroundImage = original.backgroundImage;
+          }
         }
         replacements.clear();
+      },
+      async snapshotCanvas(candidate) {
+        const target = findCandidateTarget(candidate);
+        if (!(target instanceof HTMLCanvasElement)) throw new Error('page_image_fetch_failed');
+        if (!target.width || !target.height) throw new Error('page_image_fetch_failed');
+        const blob = await new Promise<Blob | null>((resolve) => {
+          try {
+            target.toBlob((result) => resolve(result), 'image/png');
+          } catch {
+            resolve(null);
+          }
+        });
+        if (blob && blob.size > 0) return new File([blob], candidate.fileName, { type: 'image/png' });
+        // Fallback for engines without toBlob; throws on tainted canvases.
+        let dataUrl: string;
+        try {
+          dataUrl = target.toDataURL('image/png');
+        } catch {
+          throw new Error('page_image_fetch_failed');
+        }
+        const base64 = dataUrl.split(',')[1];
+        if (!base64) throw new Error('page_image_fetch_failed');
+        const decoded = atob(base64);
+        const bytes = new Uint8Array(decoded.length);
+        for (let index = 0; index < decoded.length; index += 1) bytes[index] = decoded.charCodeAt(index);
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        return new File([buffer], candidate.fileName, { type: 'image/png' });
       },
       async setLayout() {
         // The modal ShadowRoot container always covers the viewport; its root

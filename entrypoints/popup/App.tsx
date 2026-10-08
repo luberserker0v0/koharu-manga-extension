@@ -177,8 +177,11 @@ export function App() {
               sourcePageUrl={workflow.workflow.sourcePageUrl}
               selectedImageCount={workflow.workflow.fileNames.length}
               autoApplyInline={false}
+              canRequeue={Boolean(workflow.workflow.preflightId) && !workflow.workflow.uploadDeletedAt}
+              requeueBusy={workflow.phase === 'checking'}
               onReset={() => void workflow.reset()}
               onJobReplaced={(jobId) => void workflow.replaceJob(jobId)}
+              onRequeue={() => void workflow.requeueFromPreflight()}
               onUploadDeleted={() => void workflow.markUploadDeleted()}
               onApplyJob={activePage.url ? applyToActivePage : undefined}
             />
@@ -197,6 +200,23 @@ export function App() {
             <div className="empty-state">
               <p><strong>{t('popupEmptyTitle')}</strong></p>
               <p className="muted">{t('popupEmptyDescription')}</p>
+              <div className="button-row" style={{ justifyContent: 'center' }}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={workflow.phase === 'checking'}
+                  onClick={() => void workflow.refreshAvailability()}
+                >
+                  {t('checkConnection')}
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  {t('openSettings')}
+                </button>
+              </div>
             </div>
           )}
           <JobHistory

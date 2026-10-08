@@ -1,6 +1,8 @@
 export type PageImageOrigin = 'dom' | 'comic_crawler';
 export type PageImageLoadStatus = 'loaded' | 'pending' | 'failed';
 
+export type PageImageTargetKind = 'img' | 'canvas' | 'css-background' | 'video';
+
 export interface PageImageCandidate {
   id: string;
   order: number;
@@ -11,6 +13,7 @@ export interface PageImageCandidate {
   origin: PageImageOrigin;
   loadStatus: PageImageLoadStatus;
   domLocator?: string;
+  targetKind?: PageImageTargetKind;
   selected: boolean;
 }
 

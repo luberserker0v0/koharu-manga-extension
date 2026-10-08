@@ -28,7 +28,7 @@ function formatJobDuration(milliseconds: number | null): string {
   return t('durationSeconds', String(duration.seconds));
 }
 
-export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, uploadId, uploadDeleted, sourcePageUrl, selectedImageCount, autoApplyInline = true, onReset, onJobReplaced, onUploadDeleted, onApplyInline, onApplyJob, onRestoreInline }: {
+export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, uploadId, uploadDeleted, sourcePageUrl, selectedImageCount, autoApplyInline = true, canRequeue = false, requeueBusy = false, onReset, onJobReplaced, onRequeue, onUploadDeleted, onApplyInline, onApplyJob, onRestoreInline }: {
   client: BackendClient;
   jobId: string;
   job: JobResource | null;
@@ -41,8 +41,11 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   sourcePageUrl?: string;
   selectedImageCount?: number;
   autoApplyInline?: boolean;
+  canRequeue?: boolean;
+  requeueBusy?: boolean;
   onReset: () => void;
   onJobReplaced?: (jobId: string) => void;
+  onRequeue?: () => void;
   onUploadDeleted?: () => void;
   onApplyInline?: (urls: string[]) => Promise<boolean>;
   onApplyJob?: (jobId: string) => Promise<boolean>;
@@ -200,6 +203,11 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
             </button>
           )}
           {view.terminal && <button className="secondary-button" type="button" onClick={onReset}>{t('newTranslation')}</button>}
+          {view.terminal && canRequeue && onRequeue && (
+            <button className="primary-button" type="button" disabled={requeueBusy} onClick={onRequeue}>
+              {requeueBusy ? t('requeueingTranslation') : t('requeueTranslation')}
+            </button>
+          )}
           {job.status === 'failed' && job.resumeMetadata?.resumeAvailable === true && (
             <button className="primary-button" type="button" disabled={jobAction !== null} onClick={() => void createAttempt('resume')}>{jobAction === 'resume' ? t('resumingJob') : t('resumeJob')}</button>
           )}

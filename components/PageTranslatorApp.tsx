@@ -195,12 +195,30 @@ export function PageTranslatorApp({ domBridge }: { domBridge: PageDomBridge }) {
     const loadController = new AbortController();
     sourceController.current = loadController;
     try {
-      const origins = await requiredSourceOrigins(selected);
+      const canvasSelected = selected.filter((candidate) => candidate.sourceUrl.startsWith('canvas:'));
+      const urlSelected = selected.filter((candidate) => !candidate.sourceUrl.startsWith('canvas:'));
+      const origins = await requiredSourceOrigins(urlSelected);
       if (origins.length) {
         const access = await browser.runtime.sendMessage({ type: 'CHECK_SOURCE_ORIGINS', origins }) as { granted?: boolean } | undefined;
         if (!access?.granted) throw new Error('source_host_permission_required');
       }
-      const files = await loadCandidateFiles(selected, loadController.signal, (current, total) => setSourceProgress([current, total]));
+      const filesById = new Map<string, File>();
+      if (urlSelected.length) {
+        const loaded = await loadCandidateFiles(
+          urlSelected,
+          loadController.signal,
+          (current) => setSourceProgress([current, selected.length]),
+        );
+        urlSelected.forEach((candidate, index) => filesById.set(candidate.id, loaded[index]!));
+      }
+      for (let index = 0; index < canvasSelected.length; index += 1) {
+        if (loadController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const candidate = canvasSelected[index]!;
+        filesById.set(candidate.id, await domBridge.snapshotCanvas(candidate));
+        setSourceProgress([urlSelected.length + index + 1, selected.length]);
+      }
+      const files = selected.map((candidate) => filesById.get(candidate.id)!).filter(Boolean);
+      if (files.length !== selected.length) throw new Error('page_image_fetch_failed');
       await workflow.startUpload(files, true, result?.detector === 'comic_crawler' && result.chapterUrl && result.adapter
         ? { adapterId: result.adapter.id, chapterUrl: result.chapterUrl }
         : undefined);
@@ -373,8 +391,11 @@ export function PageTranslatorApp({ domBridge }: { domBridge: PageDomBridge }) {
               sourcePageUrl={workflow.workflow.sourcePageUrl}
               selectedImageCount={selected.length}
               autoApplyInline={!workflow.restored}
+              canRequeue={Boolean(workflow.workflow.preflightId) && !workflow.workflow.uploadDeletedAt}
+              requeueBusy={workflow.phase === 'checking'}
               onReset={() => void workflow.reset()}
               onJobReplaced={(jobId) => void workflow.replaceJob(jobId)}
+              onRequeue={() => void workflow.requeueFromPreflight()}
               onUploadDeleted={() => void workflow.markUploadDeleted()}
               onApplyInline={selected.length ? applyInline : undefined}
               onRestoreInline={selected.length ? restoreInline : undefined}

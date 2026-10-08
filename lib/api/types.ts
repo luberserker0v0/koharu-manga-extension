@@ -1,4 +1,4 @@
-export type TranslationMode = 'quick' | 'reference_style' | 'local_style' | 'learning_style';
+export type TranslationMode = 'quick';
 export type ExportFormat = 'rendered' | 'psd' | 'khr' | 'inpainted';
 
 export interface TranslationTarget {
@@ -105,7 +105,6 @@ export interface TranslationJobRequest {
   chapterId: string;
   sourcePreflightId: string;
   sourceLanguage?: string;
-  referenceTranslatorId?: string;
 }
 
 export type JobStatus =

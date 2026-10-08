@@ -152,6 +152,8 @@
   "confirmDeleteUpload": { "message": "要刪除保留的來源上傳嗎？後續編修與重新匯出可能仍需要這些圖片。" },
   "sourceUploadDeleted": { "message": "來源上傳已刪除" },
   "newTranslation": { "message": "開始另一個翻譯" },
+  "requeueTranslation": { "message": "沿用圖片，更改設定" },
+  "requeueingTranslation": { "message": "正在載入預檢…" },
   "jobState_queued": { "message": "已排入" },
   "jobState_waiting": { "message": "等待中" },
   "jobState_running": { "message": "執行中" },
@@ -249,4 +251,5 @@
   ,"warning_comicCrawler_api": { "message": "ComicCrawler 拒絕圖片探索，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler 傳回不支援的回應，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler 尚未安裝章節圖片 API，已改用一般頁面掃描。" }
+  ,"warning_canvas_snapshot": { "message": "Canvas 頁面會以 PNG 快照匯出；受污染的 canvas 可能無法匯出。" }
 }

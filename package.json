@@ -10,6 +10,7 @@
     "build:edge": "wxt build -b edge",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
     "compile": "wxt prepare && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
