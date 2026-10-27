@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearWorkflow,
   clearWorkflowHistory,
+  discardMissingWorkflow,
   findWorkflowForChapter,
   loadWorkflow,
   loadWorkflowHistory,
@@ -70,6 +71,21 @@ describe('workflow history', () => {
     ]);
   });
 
+  it('routes missing-job cleanup through the background when content-script storage is blocked', async () => {
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const denied = vi.fn().mockRejectedValue(new Error('Access to storage is not allowed from this context.'));
+    vi.stubGlobal('browser', {
+      storage: { local: { get: denied, set: denied, remove: denied } },
+      runtime: { sendMessage },
+    });
+
+    await expect(discardMissingWorkflow('job-missing', 'https://reader.example/chapter/1')).resolves.toBeUndefined();
+    expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual([
+      'WORKFLOW_CLEAR',
+      'WORKFLOW_HISTORY_REMOVE',
+    ]);
+  });
+
   it('keeps separate explicit retry attempts for the same chapter', async () => {
     await saveWorkflow(workflow('job-1'));
     await saveWorkflow(workflow('job-2'));
@@ -78,10 +94,10 @@ describe('workflow history', () => {
 
   it('updates an existing job record without creating a duplicate', async () => {
     await saveWorkflow(workflow('job-1'));
-    await saveWorkflow({ ...workflow('job-1'), uploadDeletedAt: '2026-01-01T00:00:00.000Z' });
+    await saveWorkflow({ ...workflow('job-1'), fileNames: ['updated.png'] });
     const history = await loadWorkflowHistory();
     expect(history).toHaveLength(1);
-    expect(history[0]?.uploadDeletedAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(history[0]?.fileNames).toEqual(['updated.png']);
   });
 
   it('stores and restores workflows separately for each chapter URL', async () => {
@@ -132,11 +148,40 @@ describe('workflow history', () => {
     )?.jobId).toBe('job-canonical');
   });
 
+  it('matches a saved job by stable ComicCrawler chapter ID when the URL changes', () => {
+    const saved = {
+      ...workflow('job-stable-id'),
+      sourcePageUrl: 'https://reader.example/old-reader-url',
+      comicCrawler: {
+        adapterId: 'reader',
+        chapterUrl: 'https://reader.example/old-canonical-url',
+        chapterId: 'chapter-stable',
+      },
+    };
+    expect(findWorkflowForChapter(
+      [saved],
+      'https://reader.example/new-reader-url',
+      'https://reader.example/new-canonical-url',
+      'chapter-stable',
+    )?.jobId).toBe('job-stable-id');
+  });
+
   it('removes one local history item without deleting the others', async () => {
     await saveWorkflow(workflow('job-1'));
     await saveWorkflow(workflow('job-2'));
     await removeWorkflowHistoryItem('job-1');
     expect((await loadWorkflowHistory()).map((item) => item.jobId)).toEqual(['job-2']);
+  });
+
+  it('discards a missing job from both its page slot and local history', async () => {
+    const sourcePageUrl = 'https://reader.example/chapter/missing';
+    await saveWorkflow({ ...workflow('job-missing'), sourcePageUrl });
+    await saveWorkflow(workflow('job-kept'));
+
+    await discardMissingWorkflow('job-missing', sourcePageUrl);
+
+    await expect(loadWorkflow(sourcePageUrl)).resolves.toBeNull();
+    expect((await loadWorkflowHistory()).map((item) => item.jobId)).toEqual(['job-kept']);
   });
 
   it('clears all local job history', async () => {

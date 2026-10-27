@@ -14,13 +14,29 @@ export interface StoredWorkflow {
   sourcePageUrl?: string;
   preflightId?: string;
   jobId?: string;
+  rootJobId?: string;
+  parentJobId?: string;
   fileNames: string[];
+  sourceImages?: Array<{
+    sourceImageId: string;
+    uploadOrder: number;
+    fileName: string;
+  }>;
   bindings?: StoredBindings;
   updatedAt: string;
-  uploadDeletedAt?: string;
   comicCrawler?: {
     adapterId: string;
     chapterUrl: string;
+    chapterId?: string;
+    canonicalUrl?: string;
+    pages?: Array<{
+      pageId: string;
+      sourceOrderIndex: number;
+      uploadOrder: number;
+      fileName: string;
+      sourceImageId?: string;
+      sourceFingerprint?: string;
+    }>;
   };
 }
 
@@ -39,7 +55,13 @@ function safePageWorkflowKey(rawUrl: string | undefined): string | null {
   try { return pageWorkflowKey(rawUrl); } catch { return null; }
 }
 
-export function workflowMatchesChapter(workflow: StoredWorkflow, pageUrl: string, chapterUrl: string): boolean {
+export function workflowMatchesChapter(
+  workflow: StoredWorkflow,
+  pageUrl: string,
+  chapterUrl: string,
+  chapterId?: string,
+): boolean {
+  if (chapterId && workflow.comicCrawler?.chapterId === chapterId) return true;
   const targets = new Set([safePageWorkflowKey(pageUrl), safePageWorkflowKey(chapterUrl)].filter((value): value is string => Boolean(value)));
   return [workflow.sourcePageUrl, workflow.comicCrawler?.chapterUrl]
     .some((url) => {
@@ -52,8 +74,9 @@ export function findWorkflowForChapter(
   workflows: StoredWorkflow[],
   pageUrl: string,
   chapterUrl: string,
+  chapterId?: string,
 ): StoredWorkflow | null {
-  return workflows.find((workflow) => workflow.jobId && workflowMatchesChapter(workflow, pageUrl, chapterUrl)) ?? null;
+  return workflows.find((workflow) => workflow.jobId && workflowMatchesChapter(workflow, pageUrl, chapterUrl, chapterId)) ?? null;
 }
 
 export async function readWorkflowFromStorage(sourcePageUrl?: string): Promise<StoredWorkflow | null> {
@@ -77,10 +100,7 @@ export async function writeWorkflowToStorage(workflow: StoredWorkflow): Promise<
   }
   if (workflow.jobId && workflow.bindings) {
     const history = await readWorkflowHistoryFromStorage();
-    const normalizedHistory = workflow.uploadDeletedAt
-      ? history.map((item) => item.uploadId === workflow.uploadId ? { ...item, uploadDeletedAt: workflow.uploadDeletedAt } : item)
-      : history;
-    const next = [workflow, ...normalizedHistory.filter((item) => workflow.sourcePageUrl
+    const next = [workflow, ...history.filter((item) => workflow.sourcePageUrl
       ? item.sourcePageUrl !== workflow.sourcePageUrl
       : item.jobId !== workflow.jobId)].slice(0, 50);
     await browser.storage.local.set({ [WORKFLOW_HISTORY_KEY]: next });
@@ -110,11 +130,19 @@ export async function readWorkflowHistoryFromStorage(): Promise<StoredWorkflow[]
   return Array.isArray(value) ? value as StoredWorkflow[] : [];
 }
 
-export async function removeWorkflowHistoryItem(jobId: string): Promise<void> {
+export async function removeWorkflowHistoryItemFromStorage(jobId: string): Promise<void> {
   const history = await readWorkflowHistoryFromStorage();
   await browser.storage.local.set({
     [WORKFLOW_HISTORY_KEY]: history.filter((item) => item.jobId !== jobId),
   });
+}
+
+export async function removeWorkflowHistoryItem(jobId: string): Promise<void> {
+  try {
+    await removeWorkflowHistoryItemFromStorage(jobId);
+  } catch {
+    await browser.runtime.sendMessage({ type: 'WORKFLOW_HISTORY_REMOVE', jobId });
+  }
 }
 
 export async function clearWorkflowHistory(): Promise<void> {
@@ -143,6 +171,11 @@ export async function clearWorkflow(sourcePageUrl?: string): Promise<void> {
   } catch {
     await browser.runtime.sendMessage({ type: 'WORKFLOW_CLEAR', sourcePageUrl });
   }
+}
+
+export async function discardMissingWorkflow(jobId: string, sourcePageUrl?: string): Promise<void> {
+  await clearWorkflow(sourcePageUrl);
+  await removeWorkflowHistoryItem(jobId);
 }
 
 export async function loadWorkflowHistory(): Promise<StoredWorkflow[]> {

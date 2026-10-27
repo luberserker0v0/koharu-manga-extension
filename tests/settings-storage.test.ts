@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadApiSettings } from '../lib/storage/settings';
+import { apiSettingsForUntrustedContext, loadApiSettings } from '../lib/storage/settings';
 
 describe('API settings loading', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -49,5 +49,24 @@ describe('API settings loading', () => {
       comicCrawler: { enabled: true, username: 'crawler', autoApplyPreviousTranslation: false },
     });
     expect(sendMessage).toHaveBeenCalledWith({ type: 'GET_API_SETTINGS' });
+  });
+
+  it('redacts every credential before settings cross into a content script', () => {
+    expect(apiSettingsForUntrustedContext({
+      baseUrl: 'http://127.0.0.1:4001/api/v1',
+      token: 'backend-secret',
+      comicCrawler: {
+        enabled: true,
+        autoApplyPreviousTranslation: false,
+        baseUrl: 'http://127.0.0.1:4100',
+        username: 'basic-user',
+        password: 'basic-secret',
+        userId: 'alice',
+        userToken: 'user-secret',
+      },
+    })).toMatchObject({
+      token: '',
+      comicCrawler: { username: '', password: '', userId: '', userToken: '' },
+    });
   });
 });

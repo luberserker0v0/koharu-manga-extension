@@ -134,6 +134,33 @@ export function SettingsPanel({ settings, onSave, onClose }: {
           </label>
         </div>
         <p className="field-help">{t('comicCrawlerAuthHelp')}</p>
+        <div className="settings-subsection">
+          <strong>{t('browserClientCredentialsTitle')}</strong>
+          <p className="field-help">{t('browserClientCredentialsHelp')}</p>
+        </div>
+        <label>
+          <span>{t('browserClientUserIdLabel')}</span>
+          <input
+            value={draft.comicCrawler.userId}
+            autoComplete="username"
+            onChange={(event) => setDraft({
+              ...draft,
+              comicCrawler: { ...draft.comicCrawler, userId: event.target.value },
+            })}
+          />
+        </label>
+        <label>
+          <span>{t('browserClientUserTokenLabel')}</span>
+          <input
+            type="password"
+            value={draft.comicCrawler.userToken}
+            autoComplete="off"
+            onChange={(event) => setDraft({
+              ...draft,
+              comicCrawler: { ...draft.comicCrawler, userToken: event.target.value },
+            })}
+          />
+        </label>
         {draft.comicCrawler.enabled && (
           <div className="connection-strip settings-connection-strip" role="status">
             <span className={`connection-dot ${crawlerCheck === 'ready' ? 'online' : ''}`} />

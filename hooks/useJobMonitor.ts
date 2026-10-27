@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BackendClient } from '../lib/api/backend-client';
 import { JobMonitor, type MonitorTransport } from '../lib/api/job-monitor';
+import { BackendApiError } from '../lib/api/errors';
 import type { JobArtifact, JobEvent, JobResource } from '../lib/api/types';
 import { isTerminalJobStatus } from '../lib/domain/job-state';
 
-export function useJobMonitor(client: BackendClient | null, jobId: string | null) {
+export function useJobMonitor(
+  client: BackendClient | null,
+  jobId: string | null,
+  onMissingJob?: () => void | Promise<void>,
+) {
   const [job, setJob] = useState<JobResource | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [artifacts, setArtifacts] = useState<JobArtifact[]>([]);
@@ -45,14 +50,23 @@ export function useJobMonitor(client: BackendClient | null, jobId: string | null
         });
       },
       onTransport: (next) => { if (!disposed) setTransport(next); },
-      onError: (error) => { if (!disposed) setMonitorError(error); },
+      onError: (error) => {
+        if (disposed) return;
+        if (error instanceof BackendApiError && error.status === 404 && onMissingJob) {
+          void Promise.resolve(onMissingJob()).catch(() => {
+            if (!disposed) setMonitorError(error);
+          });
+          return;
+        }
+        setMonitorError(error);
+      },
     });
     void monitor.start();
     return () => {
       disposed = true;
       monitor.stop();
     };
-  }, [client, jobId]);
+  }, [client, jobId, onMissingJob]);
 
   return useMemo(() => ({ job, events, artifacts, transport, monitorError }), [job, events, artifacts, transport, monitorError]);
 }

@@ -7,8 +7,15 @@ import type {
   HealthResponse,
   JobArtifact,
   JobResource,
+  PageRevision,
+  PageRevisionManifest,
+  PageRevisionSelection,
+  ReadinessResponse,
   RuntimeStatus,
+  SelectiveRetranslationRequest,
   SourcePreflight,
+  TextRegionCorrectionRequest,
+  TextRegionSnapshot,
   TranslationJobRequest,
   TranslatedImage,
   TranslatedImagesEnvelope,
@@ -192,6 +199,18 @@ export class BackendClient {
     return this.json('/runtime/status', { signal });
   }
 
+  async readiness(signal?: AbortSignal): Promise<ReadinessResponse> {
+    try {
+      return await this.json('/ready', { signal });
+    } catch (error) {
+      if (error instanceof BackendApiError && error.status === 503 && error.detail
+        && typeof error.detail === 'object' && 'ok' in error.detail) {
+        return error.detail as ReadinessResponse;
+      }
+      throw error;
+    }
+  }
+
   getTranslationProviders(signal?: AbortSignal): Promise<TranslationProviderCatalog> {
     return this.json('/runtime/koharu/translation-providers', { signal });
   }
@@ -351,6 +370,31 @@ export class BackendClient {
     return this.json('/jobs/translation', { method: 'POST', body: payload, signal });
   }
 
+  createRetranslation(parentJobId: string, payload: SelectiveRetranslationRequest, signal?: AbortSignal): Promise<JobResource> {
+    return this.json(`/jobs/${encodeURIComponent(parentJobId)}/retranslations`, {
+      method: 'POST',
+      body: payload,
+      signal,
+    });
+  }
+
+  getTextRegions(jobId: string, sourceImageId?: string, signal?: AbortSignal): Promise<TextRegionSnapshot> {
+    const query = sourceImageId ? `?sourceImageId=${encodeURIComponent(sourceImageId)}` : '';
+    return this.json(`/jobs/${encodeURIComponent(jobId)}/text-regions${query}`, { signal });
+  }
+
+  createTextRegionCorrection(
+    parentJobId: string,
+    payload: TextRegionCorrectionRequest,
+    signal?: AbortSignal,
+  ): Promise<JobResource> {
+    return this.json(`/jobs/${encodeURIComponent(parentJobId)}/text-region-corrections`, {
+      method: 'POST',
+      body: payload,
+      signal,
+    });
+  }
+
   getJob(jobId: string, signal?: AbortSignal): Promise<JobResource> {
     return this.json(`/jobs/${encodeURIComponent(jobId)}`, { signal });
   }
@@ -379,8 +423,32 @@ export class BackendClient {
     return this.json(`/jobs/${encodeURIComponent(jobId)}/translated-images`, { signal });
   }
 
+  getPageRevisions(rootJobId: string, signal?: AbortSignal): Promise<PageRevisionManifest> {
+    return this.json(`/jobs/${encodeURIComponent(rootJobId)}/page-revisions`, { signal });
+  }
+
+  activatePageRevisions(
+    rootJobId: string,
+    selections: PageRevisionSelection[],
+    signal?: AbortSignal,
+  ): Promise<PageRevisionManifest> {
+    return this.json(`/jobs/${encodeURIComponent(rootJobId)}/page-revisions/activate`, {
+      method: 'POST',
+      body: { selections },
+      signal,
+    });
+  }
+
   async downloadTranslatedImage(jobId: string, image: TranslatedImage, signal?: AbortSignal): Promise<Blob> {
     const path = `/jobs/${encodeURIComponent(jobId)}/translated-images/${encodeURIComponent(image.id)}/content`;
+    const response = await this.request(path, { signal });
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('translated_image_content_invalid');
+    return blob;
+  }
+
+  async downloadPageRevisionImage(revision: PageRevision, signal?: AbortSignal): Promise<Blob> {
+    const path = `/jobs/${encodeURIComponent(revision.jobId)}/translated-images/${encodeURIComponent(revision.image.id)}/content`;
     const response = await this.request(path, { signal });
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('translated_image_content_invalid');

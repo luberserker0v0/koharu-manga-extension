@@ -101,7 +101,10 @@ export class JobMonitor {
       }
       if (!signal.aborted) await this.reconcile();
     } catch (error) {
-      if (!isAbortError(error) && !signal.aborted) this.callbacks.onError(error);
+      if (!isAbortError(error) && !signal.aborted) {
+        this.callbacks.onTransport('stopped');
+        this.callbacks.onError(error);
+      }
     }
   }
 

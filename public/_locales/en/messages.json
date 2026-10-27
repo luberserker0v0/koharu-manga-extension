@@ -43,9 +43,65 @@
   "comicCrawlerUsernameLabel": { "message": "Basic-auth username" },
   "comicCrawlerPasswordLabel": { "message": "Basic-auth password" },
   "comicCrawlerAuthHelp": { "message": "Credentials are stored only in extension-local storage and are never shown to the page." },
+  "browserClientCredentialsTitle": { "message": "Browser Client enrollment" },
+  "browserClientCredentialsHelp": { "message": "Used for SDK enrollment and authenticated ComicCrawler REST requests. Leave both blank only when the server uses public mode." },
+  "browserClientUserIdLabel": { "message": "ComicCrawler user ID" },
+  "browserClientUserTokenLabel": { "message": "ComicCrawler user API token" },
   "saveSettings": { "message": "Save settings" },
   "savingSettings": { "message": "Saving…" },
   "settingsSaved": { "message": "Settings saved." },
+
+  "browserClientLoading": { "message": "Loading Browser Client…" },
+  "browserClientEyebrow": { "message": "ComicCrawler Browser Client" },
+  "browserClientTitle": { "message": "Use the current tab" },
+  "browserClientStatus_not_enrolled": { "message": "Not enrolled" },
+  "browserClientStatus_disconnected": { "message": "Enrolled · disconnected" },
+  "browserClientStatus_connecting": { "message": "Connecting…" },
+  "browserClientStatus_connected": { "message": "Connected" },
+  "browserClientStatus_error": { "message": "Connection error" },
+  "browserClientWorkerId": { "message": "Worker ID" },
+  "browserClientResourceId": { "message": "Resource ID" },
+  "browserClientApprovedPage": { "message": "Approved tab" },
+  "browserClientEnroll": { "message": "Enroll" },
+  "browserClientEnrolling": { "message": "Enrolling…" },
+  "browserClientConnect": { "message": "Connect" },
+  "browserClientConnecting": { "message": "Connecting…" },
+  "browserClientDisconnect": { "message": "Disconnect" },
+  "browserClientLogout": { "message": "Clear credential" },
+  "browserClientUseCurrentTab": { "message": "Use current tab" },
+  "browserClientRegisteringTab": { "message": "Registering tab…" },
+  "browserClientCreateTask": { "message": "Create chapter-image task" },
+  "browserClientDiscoveryConfirm": { "message": "No approved chapter-image adapter matches this page. Ask ComicCrawler to queue adapter discovery for this one page? Generated drafts still require review in ComicCrawler WebUI." },
+  "browserClientCreatingTask": { "message": "Creating task…" },
+  "browserClientTaskTitle": { "message": "Crawler task" },
+  "browserClientTaskId": { "message": "Task / discovery ID" },
+  "browserClientTaskUrl": { "message": "Target URL" },
+  "browserClientTaskUpdated": { "message": "Updated" },
+  "browserClientTaskProgress": { "message": "Progress" },
+  "browserClientVerificationHelp": { "message": "Complete the verification in the approved tab. The extension checks the page and resumes the task after the challenge disappears, but never solves CAPTCHA." },
+  "browserClientVerificationStatus": { "message": "Verification status" },
+  "browserClientRecovery_browser_disconnected": { "message": "The Browser Client is disconnected. Background recovery will keep trying to reconnect." },
+  "browserClientRecovery_resource_unavailable": { "message": "The task's approved tab resource is no longer available. Open its target URL, then recover the task with the current tab." },
+  "browserClientRecovery_worker_changed": { "message": "The Browser Worker changed after the task started. Open its target URL, then explicitly rebind the task to the current tab." },
+  "browserClientRecoverTask": { "message": "Recover with current tab" },
+  "browserClientRecoveringTask": { "message": "Recovering task…" },
+  "browserClientDiscoveryHelp": { "message": "Adapter discovery was queued. Review and approve the draft in ComicCrawler WebUI." },
+  "browserClientOpenVerification": { "message": "Focus verification tab" },
+  "browserClientContinue": { "message": "Continue" },
+  "browserClientContinuing": { "message": "Continuing…" },
+  "browserClientCancelTask": { "message": "Cancel" },
+  "browserClientClearTask": { "message": "Clear local task" },
+  "browserClientErrorCode": { "message": "Browser Client error: $CODE$", "placeholders": { "code": { "content": "$1" } } },
+  "crawlerTaskState_pending": { "message": "Pending" },
+  "crawlerTaskState_waiting_for_browser_worker": { "message": "Waiting for Browser Worker" },
+  "crawlerTaskState_running": { "message": "Running" },
+  "crawlerTaskState_waiting_verification": { "message": "Waiting for verification" },
+  "crawlerTaskState_verification_completed": { "message": "Verification completed · create the task again" },
+  "crawlerTaskState_completed": { "message": "Completed" },
+  "crawlerTaskState_failed": { "message": "Failed" },
+  "crawlerTaskState_cancelled": { "message": "Cancelled" },
+  "crawlerTaskState_interrupted": { "message": "Interrupted" },
+  "crawlerTaskState_discovery_queued": { "message": "Discovery queued" },
 
   "quickModeEyebrow": { "message": "Quick translation" },
   "popupEmptyTitle": { "message": "No active translation here" },
@@ -55,6 +111,7 @@
   "detectingPageImages": { "message": "Looking for manga pages…" },
   "pageTranslatorTitle": { "message": "Translate manga pages" },
   "closePageTranslator": { "message": "Close page translator" },
+  "cancelPageTranslation": { "message": "Cancel" },
   "pageImageReviewDescription": { "message": "Inspect, exclude, and reorder the loaded images before sending them to your configured backend." },
   "adapterDetected": { "message": "ComicCrawler adapter: $ADAPTER$", "placeholders": { "adapter": { "content": "$1" } } },
   "scanningPageImages": { "message": "Loading and scanning the page…" },
@@ -124,8 +181,17 @@
 
   "jobEyebrow": { "message": "Translation job" },
   "jobTitle": { "message": "Live progress" },
+  "workspaceTabsLabel": { "message": "Translation workspace sections" },
+  "workspaceTabJob": { "message": "Job" },
+  "workspaceTabArtifacts": { "message": "Artifacts" },
+  "workspaceTabEvents": { "message": "Events" },
+  "workspaceTabOcr": { "message": "OCR" },
+  "workspaceTabRevisions": { "message": "Page versions" },
   "loadingJobTitle": { "message": "Reconnecting to the job" },
   "loadingJobDescription": { "message": "Reading the authoritative state for $ID$…", "placeholders": { "id": { "content": "$1" } } },
+  "missingJobTitle": { "message": "This job no longer exists on the backend" },
+  "missingJobDescription": { "message": "The extension restored job $ID$ from local history, but the configured backend returned 404. It may have been removed, or this may be a different backend data store.", "placeholders": { "id": { "content": "$1" } } },
+  "discardMissingJob": { "message": "Remove invalid job" },
   "jobStageLabel": { "message": "Current stage" },
   "jobTypeLabel": { "message": "Job type" },
   "jobUpdatedLabel": { "message": "Last updated" },
@@ -147,10 +213,6 @@
   "resumingJob": { "message": "Resuming…" },
   "retryJob": { "message": "Retry as new job" },
   "retryingJob": { "message": "Retrying…" },
-  "deleteSourceUpload": { "message": "Delete source upload" },
-  "deletingUpload": { "message": "Deleting upload…" },
-  "confirmDeleteUpload": { "message": "Delete the retained source upload? Post-edit and re-export workflows may still need these images." },
-  "sourceUploadDeleted": { "message": "Source upload deleted" },
   "newTranslation": { "message": "Start another translation" },
   "requeueTranslation": { "message": "Same images, new settings" },
   "requeueingTranslation": { "message": "Reloading preflight…" },
@@ -199,6 +261,15 @@
   "jobEventType_child_job_failed": { "message": "Child job failed" },
   "jobEventType_artifact_created": { "message": "Artifact created" },
   "jobEventType_artifact_persisted": { "message": "Artifact saved" },
+  "jobEventType_setup_completed": { "message": "Translation setup completed" },
+  "jobEventType_pipeline_progress": { "message": "Page translation progress" },
+  "jobEventType_pipeline_metrics": { "message": "Pipeline performance summary" },
+  "jobEventType_pipeline_completed": { "message": "Translation pipeline completed" },
+  "jobEventType_quality_completed": { "message": "Quality review completed" },
+  "jobEventType_knowledge_completed": { "message": "Knowledge processing completed" },
+  "jobEventType_export_completed": { "message": "Chapter export completed" },
+  "jobEventType_project_closed": { "message": "Koharu project closed" },
+  "jobEventType_reference_extraction_completed": { "message": "Reference extraction completed" },
   "jobEventType_unknown": { "message": "Backend event: $TYPE$", "placeholders": { "type": { "content": "$1" } } },
   "jobEventMeta_stage": { "message": "Stage" },
   "jobEventMeta_status": { "message": "Status" },
@@ -226,6 +297,22 @@
   "error_versioned_route_required": { "message": "The API URL must end in /api/v1." },
   "error_host_permission_denied": { "message": "Host access was not granted, so the backend setting was not saved." },
   "error_settings_not_loaded": { "message": "Backend settings are not loaded yet." },
+  "error_comicCrawler_browser_credentials_incomplete": { "message": "Enter both the ComicCrawler user ID and user API token, or leave both blank for public mode." },
+  "error_comicCrawler_browser_not_connected": { "message": "Connect the ComicCrawler Browser Client first." },
+  "error_comicCrawler_browser_tab_not_registered": { "message": "Approve the current tab again before creating a task." },
+  "error_comicCrawler_browser_no_verification": { "message": "This task has no active verification handoff." },
+  "error_comicCrawler_browser_verification_not_ready": { "message": "The approved tab still shows a verification or blocked page. Complete it in that tab; background checking will continue automatically." },
+  "error_comicCrawler_browser_no_task": { "message": "There is no current ComicCrawler task." },
+  "error_comicCrawler_browser_task_not_recoverable": { "message": "This ComicCrawler task is not in a recoverable Browser-target state." },
+  "error_comicCrawler_browser_recovery_wrong_tab": { "message": "Open the task's target or verification URL in the current tab before recovering it." },
+  "error_comicCrawler_browser_rebind_not_found": { "message": "ComicCrawler no longer has this task. Refresh or clear the local task reference." },
+  "error_comicCrawler_browser_rebind_forbidden": { "message": "The current ComicCrawler user does not own this task or Browser target." },
+  "error_comicCrawler_browser_rebind_invalid_state": { "message": "The task changed to a state that cannot be recovered. Refresh its status before trying again." },
+  "error_comicCrawler_browser_rebind_stale_target": { "message": "The task's Browser target changed after it was loaded. Refresh the task before trying again." },
+  "error_comicCrawler_browser_rebind_invalid_target": { "message": "ComicCrawler rejected the new Browser target. Check that the Worker is idle and the current page matches the task." },
+  "error_comicCrawler_browser_task_not_cancelable": { "message": "ComicCrawler does not expose a cancellation API for this discovery record. Review it in ComicCrawler WebUI or clear the local reference." },
+  "error_comicCrawler_browser_user_gesture_required": { "message": "Open the extension popup and perform this action there." },
+  "error_current_tab_inaccessible": { "message": "The current tab is unavailable or is not an HTTP/HTTPS page." },
   "error_backend_health_unavailable": { "message": "The backend health response did not report ready." },
   "error_backend_not_ready": { "message": "The backend runtime is not ready." },
   "error_koharu_not_ready": { "message": "Koharu is not running. Start it on the host, then check again." },
@@ -233,23 +320,106 @@
   "error_translation_target_incomplete": { "message": "Choose both a translation provider and model." },
   "error_crawler_source_unavailable": { "message": "The ComicCrawler image source is unavailable." },
   "error_page_image_fetch_failed": { "message": "An image could not be read from the page." },
+  "error_source_page_mapping_incomplete": { "message": "ComicCrawler could not map every saved translation to the current chapter pages, so it was not applied automatically." },
+  "error_source_page_changed": { "message": "ComicCrawler detected that a source manga page changed, so the older translation was not applied automatically." },
   "error_artifact_not_image": { "message": "This artifact is not an image and cannot be applied inline." }
   ,"error_artifact_not_image_or_zip": { "message": "The translated artifact is neither an image nor a ZIP archive." }
   ,"error_artifact_zip_invalid": { "message": "The translated ZIP archive could not be extracted." }
   ,"error_artifact_zip_has_no_images": { "message": "The translated ZIP archive contains no supported images." }
   ,"error_artifact_image_count_mismatch": { "message": "The number of translated images does not match the selected page images, so no automatic replacement was made." }
   ,"error_inline_replacement_incomplete": { "message": "Not every source image could be found on the page. Any partial replacements were restored." }
+  ,"error_inline_restore_failed": { "message": "The original page images could not be restored. Reload the page and try again." }
   ,"error_translated_images_contract_invalid": { "message": "The backend returned an invalid translated-image manifest." }
   ,"error_translated_image_content_invalid": { "message": "The backend translated-image endpoint did not return an image." }
   ,"error_artifact_read_failed": { "message": "The translated image artifact could not be read." }
   ,"error_comicCrawler_network": { "message": "ComicCrawler could not be reached. Generic page scanning remains available." }
   ,"error_comicCrawler_api": { "message": "ComicCrawler rejected the request. Check its service and authentication settings." }
   ,"error_comicCrawler_contract": { "message": "ComicCrawler returned an unsupported response." }
-  ,"error_comicCrawler_unavailable": { "message": "ComicCrawler's production chapter-image API is unavailable. Generic page scanning is being used." }
+  ,"error_comicCrawler_unavailable": { "message": "ComicCrawler's chapter-image API is unavailable or did not finish in time. Generic page scanning is being used." }
   ,"error_source_host_permission_required": { "message": "Image-source access is required. Open the extension popup, select “Allow image sources,” then translate again." }
   ,"warning_comicCrawler_network": { "message": "ComicCrawler could not be reached; using generic page scanning." }
   ,"warning_comicCrawler_api": { "message": "ComicCrawler rejected image discovery; using generic page scanning." }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler returned an unsupported response; using generic page scanning." }
-  ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler's chapter-image API is not installed; using generic page scanning." }
+  ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler chapter-image detection is unavailable or did not finish in time; using generic page scanning." }
+  ,"warning_comicCrawler_timeout": { "message": "ComicCrawler chapter-image extraction exceeded 45 seconds, so generic page scanning is being used. Make sure the page is not waiting for verification, then retry." }
+  ,"warning_comicCrawler_verification_required": { "message": "ComicCrawler is waiting for site verification. Complete it in the current manga tab; image extraction will continue automatically once verified." }
+  ,"warning_comicCrawler_browser_target_required": { "message": "ComicCrawler could not use the current tab. Keep the manga tab open and retry; Browser Client reconnects and registers it automatically in the background." }
   ,"warning_canvas_snapshot": { "message": "Canvas pages are snapshotted as PNG. A tainted canvas may fail to export." }
+  ,"pageRevisionEyebrow": { "message": "PAGE CORRECTIONS" }
+  ,"pageRevisionTitle": { "message": "Page translation versions" }
+  ,"pageRevisionDescription": { "message": "Successful page retranslations become current automatically. Select pages to retranslate, or choose an older version for administrative recovery." }
+  ,"pageRevisionLoading": { "message": "Loading page versions…" }
+  ,"pageRevisionPage": { "message": "Page $1" }
+  ,"pageRevisionVersionLabel": { "message": "Translation version" }
+  ,"pageRevisionVersion": { "message": "Version $1" }
+  ,"pageRevisionActive": { "message": "Active" }
+  ,"pageRevisionPreview": { "message": "Preview" }
+  ,"pageRevisionPreviewAlt": { "message": "Translation preview for page $1" }
+  ,"pageRevisionInheritedTarget": { "message": "Inherited translation target" }
+  ,"retranslationInstructionsLabel": { "message": "Correction instructions (optional)" }
+  ,"retranslationInstructionsPlaceholder": { "message": "Example: Keep the character name Koharu untranslated." }
+  ,"retranslationInstructionsHelp": { "message": "The new job inherits the current translator, model, and languages. Instructions are only supported by LLM providers." }
+  ,"retranslateSelectedPages": { "message": "Retranslate $1 selected page(s)" }
+  ,"retranslationCreating": { "message": "Queuing retranslation…" }
+  ,"pageRevisionRestore": { "message": "Restore $1 selected version(s)" }
+  ,"pageRevisionRestoring": { "message": "Restoring versions…" }
+  ,"textRegionEyebrow": { "message": "OCR INSPECTION" }
+  ,"textRegionTitle": { "message": "Text regions" }
+  ,"textRegionDescription": { "message": "Inspect and correct the detected boxes and exact OCR text retained by this job. Changes across pages can be submitted together." }
+  ,"textRegionLoading": { "message": "Loading text regions…" }
+  ,"textRegionEmpty": { "message": "This job contains no detected text regions." }
+  ,"textRegionPageLabel": { "message": "Translated page" }
+  ,"textRegionPageOption": { "message": "Page $1" }
+  ,"textRegionShowBoxes": { "message": "Show detection boxes" }
+  ,"textRegionShowText": { "message": "Show OCR text on image" }
+  ,"textRegionImageMode": { "message": "Preview image" }
+  ,"textRegionOriginalImage": { "message": "Original" }
+  ,"textRegionTranslatedImage": { "message": "Translated" }
+  ,"textRegionZoomControls": { "message": "Image zoom" }
+  ,"textRegionZoomOut": { "message": "Zoom out" }
+  ,"textRegionZoomIn": { "message": "Zoom in" }
+  ,"textRegionZoomReset": { "message": "Reset zoom to 100%" }
+  ,"popupScrollControls": { "message": "Popup navigation" }
+  ,"pageScrollControls": { "message": "Translation workspace navigation" }
+  ,"scrollToTop": { "message": "Go to top" }
+  ,"scrollToBottom": { "message": "Go to bottom" }
+  ,"textRegionOriginalImageLoading": { "message": "Loading original page…" }
+  ,"textRegionOriginalPreviewAlt": { "message": "Original page $1 with text-region overlay" }
+  ,"textRegionImageLoading": { "message": "Loading translated page…" }
+  ,"textRegionPreviewAlt": { "message": "Translated page $1 with text-region overlay" }
+  ,"textRegionSelect": { "message": "Inspect text region $1" }
+  ,"textRegionListLabel": { "message": "Detected text regions" }
+  ,"textRegionSourceText": { "message": "Exact OCR source text" }
+  ,"textRegionTranslatedText": { "message": "Translated text" }
+  ,"textRegionConfidence": { "message": "OCR confidence" }
+  ,"textRegionNoSourceText": { "message": "No OCR text" }
+  ,"textRegionNoTranslatedText": { "message": "No translated text" }
+  ,"error_text_region_snapshot_unavailable": { "message": "This older job has no retained text-region snapshot." }
+  ,"error_text_region_coordinate_space_unavailable": { "message": "The backend could not provide reliable image dimensions for this text-region snapshot." }
+  ,"rootJobIdLabel": { "message": "Root Job ID" }
+  ,"retranslationPageCountLabel": { "message": "Pages being corrected" }
+  ,"textRegionChangedCount": { "message": "$1 changed" }
+  ,"textRegionChanged": { "message": "Edited region" }
+  ,"textRegionChangedMark": { "message": "Edited" }
+  ,"textRegionGeometry": { "message": "Detection-box geometry" }
+  ,"textRegionGeometry_x": { "message": "X" }
+  ,"textRegionGeometry_y": { "message": "Y" }
+  ,"textRegionGeometry_width": { "message": "Width" }
+  ,"textRegionGeometry_height": { "message": "Height" }
+  ,"textRegionGeometry_rotation": { "message": "Rotation (°)" }
+  ,"textRegionGeometryHelp": { "message": "Drag the selected box to move it or drag its green handle to resize. Coordinates use source-image pixels within $1 × $2." }
+  ,"textRegionResizeHandle": { "message": "Resize selected text region" }
+  ,"textRegionResetRegion": { "message": "Reset this region" }
+  ,"textRegionResetAll": { "message": "Reset all changes" }
+  ,"textRegionInstructionsLabel": { "message": "Translation instructions (optional)" }
+  ,"textRegionInstructionsPlaceholder": { "message": "Example: Treat Intergalactic Empire as one term." }
+  ,"textRegionCorrectionHelp": { "message": "The correction job inherits the current translation service, model, and languages. Instructions are only supported by compatible providers." }
+  ,"textRegionBatchSummary": { "message": "$1 region(s) across $2 page(s) will be submitted." }
+  ,"textRegionSubmitCorrections": { "message": "Correct and retranslate $1 region(s)" }
+  ,"textRegionCorrectionCreating": { "message": "Queuing correction job…" }
+  ,"textRegionReload": { "message": "Reload latest regions" }
+  ,"error_stale_region_set_revision": { "message": "These text regions have changed since they were loaded. Reload the latest regions and review your corrections again." }
+  ,"error_text_region_source_text_required": { "message": "Corrected OCR text cannot be empty." }
+  ,"error_text_region_geometry_invalid": { "message": "Every coordinate must be a valid number; width and height must be greater than zero." }
+  ,"error_text_region_geometry_out_of_bounds": { "message": "The detection box must stay inside the source image." }
 }

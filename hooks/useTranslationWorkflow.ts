@@ -5,6 +5,7 @@ import type { RuntimeStatus, SourcePreflight, UploadProgress } from '../lib/api/
 import { buildQuickTranslationRequest, type TranslationFormValues } from '../lib/domain/translation-request';
 import {
   clearWorkflow,
+  discardMissingWorkflow,
   loadWorkflow,
   saveWorkflow,
   type StoredWorkflow,
@@ -76,9 +77,12 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
   const checkBackend = useCallback(async (signal?: AbortSignal) => {
     if (!client) throw new Error('settings_not_loaded');
     setError(null);
+    setRuntime(null);
     setPhase('checking');
     const health = await client.health(signal);
     if (!health.ok) throw new Error('backend_health_unavailable');
+    const readiness = await client.readiness(signal);
+    if (!readiness.ok || !readiness.capabilities.koharuJobs) throw new Error('koharu_not_ready');
     const status = await client.runtimeStatus(signal);
     setRuntime(status);
     if (status.backend?.status !== 'ready') throw new Error('backend_not_ready');
@@ -136,7 +140,26 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
       await client.completeUpload(upload.uploadId, controller.signal);
       setPhase('preflighting');
       const result = await client.createPreflight(upload.uploadId, controller.signal);
-      const next = { ...record, preflightId: result.preflightId, updatedAt: new Date().toISOString() };
+      const sourceByFileName = new Map(result.images.map((image) => [image.fileName, image.id]));
+      const next: StoredWorkflow = {
+        ...record,
+        preflightId: result.preflightId,
+        sourceImages: result.images.map((image, uploadOrder) => ({
+          sourceImageId: image.id,
+          uploadOrder,
+          fileName: image.fileName,
+        })),
+        ...(record.comicCrawler?.pages ? {
+          comicCrawler: {
+            ...record.comicCrawler,
+            pages: record.comicCrawler.pages.map((page) => ({
+              ...page,
+              ...(sourceByFileName.get(page.fileName) ? { sourceImageId: sourceByFileName.get(page.fileName) } : {}),
+            })),
+          },
+        } : {}),
+        updatedAt: new Date().toISOString(),
+      };
       setWorkflow(next);
       setPreflight(result);
       await saveWorkflow(next);
@@ -180,11 +203,33 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
         controller.signal,
       );
       setPreflight(ordered);
+      const crawlerPagesByFileName = new Map(workflow.comicCrawler?.pages?.map((page) => [page.fileName, page]));
+      const reorderedCrawlerPages = crawlerPagesByFileName?.size
+        ? ordered.images.map((image, uploadOrder) => {
+            const page = crawlerPagesByFileName.get(image.fileName);
+            if (!page) throw new Error('source_page_mapping_incomplete');
+            return { ...page, uploadOrder };
+          })
+        : workflow.comicCrawler?.pages;
       const payload = buildQuickTranslationRequest(values, workflow.preflightId);
       const job = await client.createTranslationJob(payload, controller.signal);
+      const sourceImagesById = new Map(workflow.sourceImages?.map((image) => [image.sourceImageId, image]));
       const next: StoredWorkflow = {
         ...workflow,
         jobId: job.id,
+        rootJobId: job.id,
+        fileNames: ordered.images.map((image) => image.fileName),
+        sourceImages: ordered.images.map((image, uploadOrder) => ({
+          sourceImageId: image.id,
+          uploadOrder,
+          fileName: sourceImagesById.get(image.id)?.fileName ?? image.fileName,
+        })),
+        ...(workflow.comicCrawler ? {
+          comicCrawler: {
+            ...workflow.comicCrawler,
+            ...(reorderedCrawlerPages ? { pages: reorderedCrawlerPages } : {}),
+          },
+        } : {}),
         bindings: {
           mangaId: values.mangaId.trim(),
           translatorId: values.translatorId.trim(),
@@ -219,9 +264,28 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
     setPhase('idle');
   }, [sourcePageUrl]);
 
-  const replaceJob = useCallback(async (jobId: string) => {
+  const discardMissingJob = useCallback(async () => {
+    operation.current?.abort();
+    const missingJobId = workflow?.jobId;
+    if (missingJobId) await discardMissingWorkflow(missingJobId, sourcePageUrl);
+    else await clearWorkflow(sourcePageUrl);
+    setWorkflow(null);
+    setRestored(false);
+    setPreflight(null);
+    setProgress(null);
+    setError(null);
+    setPhase('idle');
+  }, [sourcePageUrl, workflow?.jobId]);
+
+  const replaceJob = useCallback(async (jobId: string, rootJobId?: string, parentJobId?: string) => {
     if (!workflow) return;
-    const next = { ...workflow, jobId, updatedAt: new Date().toISOString() };
+    const next = {
+      ...workflow,
+      jobId,
+      rootJobId: rootJobId ?? workflow.rootJobId ?? workflow.jobId ?? jobId,
+      ...(parentJobId ? { parentJobId } : {}),
+      updatedAt: new Date().toISOString(),
+    };
     setRestored(false);
     setWorkflow(next);
     await saveWorkflow(next);
@@ -266,13 +330,6 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
     if (saved.preflightId && !saved.jobId && client) setPreflight(await client.getPreflight(saved.preflightId));
   }, [client]);
 
-  const markUploadDeleted = useCallback(async () => {
-    if (!workflow) return;
-    const next = { ...workflow, uploadDeletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    setWorkflow(next);
-    await saveWorkflow(next);
-  }, [workflow]);
-
   const scopeReady = loadedScope === requestedScope;
   return {
     phase,
@@ -288,9 +345,9 @@ export function useTranslationWorkflow(client: BackendClient | null, sourcePageU
     moveImage,
     createJob,
     reset,
+    discardMissingJob,
     replaceJob,
     requeueFromPreflight,
     resumeWorkflow,
-    markUploadDeleted,
   };
 }

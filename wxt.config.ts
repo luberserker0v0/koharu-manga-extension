@@ -6,7 +6,7 @@ export default defineConfig({
     name: '__MSG_extensionName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'en',
-    permissions: ['storage', 'activeTab', 'scripting', 'downloads'],
+    permissions: ['storage', 'activeTab', 'scripting', 'downloads', 'alarms'],
     host_permissions: ['http://127.0.0.1/*', 'http://localhost/*'],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     ...(manifestVersion === 2 ? { optional_permissions: ['http://*/*', 'https://*/*'] } : {}),
@@ -16,9 +16,9 @@ export default defineConfig({
           data_collection_permissions: { required: ['none'] },
         },
       },
-    } : {}),
+    } : { minimum_chrome_version: '116' }),
     content_security_policy: {
-      extension_pages: "script-src 'self'; object-src 'self'; connect-src http: https:",
+      extension_pages: "script-src 'self'; object-src 'self'; connect-src http: https: ws: wss:",
     },
     action: {
       default_title: '__MSG_extensionName__',

@@ -5,6 +5,7 @@ import type { TranslatedImagesEnvelope } from '../lib/api/types';
 function manifest(indexes: number[]): TranslatedImagesEnvelope {
   return {
     jobId: 'job-1',
+    rootJobId: 'job-1',
     artifactId: 8,
     sourceFormat: 'zip',
     count: indexes.length,
@@ -16,6 +17,11 @@ function manifest(indexes: number[]): TranslatedImagesEnvelope {
       size: 100,
       encodedUrl: `/api/v1/jobs/job-1/translated-images/page-${index}`,
       contentUrl: `/api/v1/jobs/job-1/translated-images/page-${index}/content`,
+      sourceImageId: `source-${index}`,
+      sourceOrderIndex: index,
+      revisionId: `revision-${index}`,
+      revisionNumber: 1,
+      active: true,
     })),
   };
 }

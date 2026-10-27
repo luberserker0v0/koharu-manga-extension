@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@comiccrawler/browser-client-sdk": "https://github.com/luberserker0v0/comic-crawler/releases/download/v0.2.0/comiccrawler-browser-client-sdk-0.2.0.tgz",
     "@wxt-dev/module-react": "^1.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

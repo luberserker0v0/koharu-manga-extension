@@ -12,6 +12,8 @@ export const DEFAULT_API_SETTINGS: ApiSettings = {
     baseUrl: 'http://127.0.0.1:4100',
     username: '',
     password: '',
+    userId: '',
+    userToken: '',
   },
 };
 
@@ -30,6 +32,20 @@ export async function readApiSettingsFromStorage(): Promise<ApiSettings> {
   const stored = await browser.storage.local.get(SETTINGS_KEY);
   const value = stored[SETTINGS_KEY] as Partial<ApiSettings> | undefined;
   return apiSettingsFromStored(value);
+}
+
+export function apiSettingsForUntrustedContext(settings: ApiSettings): ApiSettings {
+  return {
+    ...settings,
+    token: '',
+    comicCrawler: {
+      ...settings.comicCrawler,
+      username: '',
+      password: '',
+      userId: '',
+      userToken: '',
+    },
+  };
 }
 
 export async function loadApiSettings(): Promise<ApiSettings> {
@@ -55,6 +71,8 @@ export async function saveApiSettings(settings: ApiSettings): Promise<ApiSetting
       baseUrl: normalizeServiceBaseUrl(settings.comicCrawler.baseUrl),
       username: settings.comicCrawler.username.trim(),
       password: settings.comicCrawler.password,
+      userId: settings.comicCrawler.userId.trim(),
+      userToken: settings.comicCrawler.userToken.trim(),
     },
   };
   const origins = [originPermissionPattern(normalized.baseUrl)];

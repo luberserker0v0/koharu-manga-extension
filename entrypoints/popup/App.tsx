@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorNotice } from '../../components/ErrorNotice';
 import { JobPanel } from '../../components/JobPanel';
+import { PageRevisionPanel } from '../../components/PageRevisionPanel';
+import { TextRegionInspectionPanel } from '../../components/TextRegionInspectionPanel';
 import { JobHistory } from '../../components/JobHistory';
 import { PageAccessPanel } from '../../components/PageAccessPanel';
+import { ScrollControls } from '../../components/ScrollControls';
 import { PreflightReview } from '../../components/PreflightReview';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { TranslationForm } from '../../components/TranslationForm';
@@ -10,27 +13,28 @@ import { useJobMonitor } from '../../hooks/useJobMonitor';
 import { useSettings } from '../../hooks/useSettings';
 import { useTranslationWorkflow } from '../../hooks/useTranslationWorkflow';
 import { BackendClient } from '../../lib/api/backend-client';
+import type { PageRevisionManifest } from '../../lib/api/types';
 import { ComicCrawlerClient } from '../../lib/comic-crawler/client';
+import { dataUrlToBlob } from '../../lib/data-url';
 import { t } from '../../lib/i18n';
-import {
-  findWorkflowForChapter,
-  loadWorkflowHistory,
-  pageWorkflowKey,
-  workflowMatchesChapter,
-} from '../../lib/storage/workflow';
+import { pageWorkflowKey } from '../../lib/storage/workflow';
 
 export function App() {
+  const scrollContainerRef = useRef<HTMLElement>(null);
   const { settings, save } = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activePage, setActivePage] = useState<{ resolved: boolean; tabId?: number; url?: string }>({ resolved: false });
+  const [activePageApplied, setActivePageApplied] = useState(false);
   const client = useMemo(() => settings ? new BackendClient(settings) : null, [settings]);
-  const crawler = useMemo(() => settings?.comicCrawler.enabled ? new ComicCrawlerClient(settings.comicCrawler) : null, [settings]);
+  const crawler = useMemo(
+    () => settings?.comicCrawler.enabled ? new ComicCrawlerClient(settings.comicCrawler, { useBackgroundProxy: true }) : null,
+    [settings],
+  );
   const [crawlerCheck, setCrawlerCheck] = useState<'idle' | 'checking' | 'ready' | 'unavailable'>('idle');
   const scopedClient = activePage.resolved ? client : null;
   const workflow = useTranslationWorkflow(scopedClient, activePage.url);
-  const monitor = useJobMonitor(scopedClient, workflow.workflow?.jobId ?? null);
+  const monitor = useJobMonitor(scopedClient, workflow.workflow?.jobId ?? null, workflow.discardMissingJob);
   const checkedClient = useRef<BackendClient | null>(null);
-  const crawlerWorkspaceLookup = useRef<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -45,6 +49,33 @@ export function App() {
       setActivePage({ resolved: true, tabId: tab?.id, url });
     })();
   }, []);
+
+  useEffect(() => {
+    setActivePageApplied(false);
+    if (activePage.tabId === undefined || !activePage.url) return;
+    let disposed = false;
+    void browser.tabs.sendMessage(activePage.tabId, { type: 'GET_PAGE_TRANSLATION_STATE' })
+      .then((response: { applied?: boolean } | undefined) => {
+        if (!disposed) setActivePageApplied(response?.applied === true);
+      })
+      .catch(() => {
+        if (!disposed) setActivePageApplied(false);
+      });
+    const listener = (message: unknown) => {
+      if (!message || typeof message !== 'object' || !('type' in message)
+        || message.type !== 'PAGE_TRANSLATION_STATE_CHANGED') return;
+      const value = message as { url?: unknown; applied?: unknown };
+      if (typeof value.url !== 'string' || typeof value.applied !== 'boolean') return;
+      try {
+        if (pageWorkflowKey(value.url) === activePage.url) setActivePageApplied(value.applied);
+      } catch { /* Ignore malformed page URLs. */ }
+    };
+    browser.runtime.onMessage.addListener(listener);
+    return () => {
+      disposed = true;
+      browser.runtime.onMessage.removeListener(listener);
+    };
+  }, [activePage.tabId, activePage.url]);
 
   useEffect(() => {
     if (!client || workflow.phase === 'loading' || checkedClient.current === client) return;
@@ -68,30 +99,12 @@ export function App() {
   useEffect(() => { void checkCrawler(); }, [checkCrawler]);
 
   useEffect(() => {
-    if (!crawler || !activePage.resolved || !activePage.url || workflow.phase === 'loading') return;
-    const lookupKey = activePage.url;
-    if (crawlerWorkspaceLookup.current === lookupKey) return;
-    crawlerWorkspaceLookup.current = lookupKey;
-    let disposed = false;
-    void (async () => {
-      const adapter = await crawler.resolveAdapter(activePage.url!);
-      if (adapter.status !== 'matched') return;
-      const chapter = await crawler.extractChapterImages(activePage.url!);
-      const history = await loadWorkflowHistory();
-      const current = workflow.workflow?.jobId
-        && workflowMatchesChapter(workflow.workflow, activePage.url!, chapter.chapterUrl)
-        ? workflow.workflow
-        : null;
-      const previous = current ?? findWorkflowForChapter(history, activePage.url!, chapter.chapterUrl);
-      if (!disposed && previous?.jobId && workflow.workflow?.jobId !== previous.jobId) {
-        await workflow.resumeWorkflow(previous);
-      }
-    })().catch(() => {
-      // The connection strip reports ComicCrawler availability. Failure to
-      // resolve a prior workspace must not block the normal popup workflow.
+    if (!crawler || !activePage.resolved || !activePage.url) return;
+    void browser.runtime.sendMessage({ type: 'COMIC_CRAWLER_BROWSER_PREPARE_TAB' }).catch(() => {
+      // ComicCrawler remains optional. The on-page translator reports an
+      // actionable warning and uses DOM detection if preparation still fails.
     });
-    return () => { disposed = true; };
-  }, [activePage.resolved, activePage.url, crawler, workflow.phase, workflow.resumeWorkflow, workflow.workflow]);
+  }, [activePage.resolved, activePage.url, crawler]);
 
   const applyToActivePage = useCallback(async (jobId: string) => {
     if (activePage.tabId === undefined || !activePage.url) return false;
@@ -111,8 +124,72 @@ export function App() {
       response = await apply();
     }
     if (!response?.ok) throw new Error(response?.error || 'inline_replacement_incomplete');
+    setActivePageApplied(true);
     return true;
   }, [activePage.tabId, activePage.url, workflow.workflow?.fileNames.length]);
+
+  const loadOriginalFromActivePage = useCallback(async (sourceImageId: string, signal?: AbortSignal): Promise<Blob> => {
+    if (activePage.tabId === undefined || !activePage.url) throw new Error('source_page_mapping_incomplete');
+    const request = async () => await browser.tabs.sendMessage(activePage.tabId!, {
+      type: 'GET_ORIGINAL_PAGE_IMAGE',
+      sourceImageId,
+    }) as { ok?: boolean; dataUrl?: string; error?: string } | undefined;
+    let response: { ok?: boolean; dataUrl?: string; error?: string } | undefined;
+    try {
+      response = await request();
+    } catch {
+      await browser.scripting.executeScript({
+        target: { tabId: activePage.tabId },
+        files: ['/content-scripts/page-translator.js'],
+      });
+      response = await request();
+    }
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    if (!response?.ok || !response.dataUrl) throw new Error(response?.error || 'page_image_fetch_failed');
+    return dataUrlToBlob(response.dataUrl);
+  }, [activePage.tabId, activePage.url]);
+
+  const applyRevisionsToActivePage = useCallback(async (manifest: PageRevisionManifest) => {
+    if (activePage.tabId === undefined || !activePage.url || !client) return;
+    const pages = [...manifest.pages]
+      .sort((left, right) => left.sourceOrderIndex - right.sourceOrderIndex)
+      .map((page) => ({
+        sourceImageId: page.sourceImageId,
+        revision: page.revisions.find((revision) => revision.revisionId === page.activeRevisionId)
+          ?? page.revisions.find((revision) => revision.active),
+      }));
+    if (pages.some((page) => !page.revision)) throw new Error('source_page_mapping_incomplete');
+    const blobs = await Promise.all(pages.map((page) => client.downloadPageRevisionImage(page.revision!)));
+    const urls = await Promise.all(blobs.map((blob) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(String(reader.result)));
+      reader.addEventListener('error', () => reject(reader.error ?? new Error('artifact_read_failed')));
+      reader.readAsDataURL(blob);
+    })));
+    const send = async () => await browser.tabs.sendMessage(activePage.tabId!, {
+      type: 'APPLY_PAGE_REVISIONS',
+      pages: pages.map((page, index) => ({ sourceImageId: page.sourceImageId, url: urls[index] })),
+    }) as { ok?: boolean; error?: string } | undefined;
+    let response: { ok?: boolean; error?: string } | undefined;
+    try {
+      response = await send();
+    } catch {
+      await browser.scripting.executeScript({
+        target: { tabId: activePage.tabId },
+        files: ['/content-scripts/page-translator.js'],
+      });
+      response = await send();
+    }
+    if (!response?.ok) throw new Error(response?.error || 'inline_replacement_incomplete');
+    setActivePageApplied(true);
+  }, [activePage.tabId, activePage.url, client]);
+
+  const restoreActivePage = useCallback(async () => {
+    if (activePage.tabId === undefined) return;
+    const response = await browser.tabs.sendMessage(activePage.tabId, { type: 'RESTORE_PAGE_IMAGES' }) as { ok?: boolean } | undefined;
+    if (!response?.ok) throw new Error('inline_restore_failed');
+    setActivePageApplied(false);
+  }, [activePage.tabId]);
 
   if (!settings || !client) {
     return <main className="app-shell loading-shell"><div className="spinner" /><span>{t('loadingExtension')}</span></main>;
@@ -121,7 +198,7 @@ export function App() {
   const connectionState = workflow.runtime?.backend.status === 'ready' && workflow.runtime?.koharu.status === 'running';
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" ref={scrollContainerRef}>
       <header className="app-header">
         <div className="brand-mark" aria-hidden="true"><span>小</span></div>
         <div className="brand-copy">
@@ -157,6 +234,7 @@ export function App() {
                 <div><dt>{t('uploadIdLabel')}</dt><dd>{workflow.workflow.uploadId}</dd></div>
                 {workflow.workflow.preflightId && <div><dt>{t('preflightIdLabel')}</dt><dd>{workflow.workflow.preflightId}</dd></div>}
                 {workflow.workflow.jobId && <div><dt>{t('jobIdLabel')}</dt><dd>{workflow.workflow.jobId}</dd></div>}
+                {workflow.workflow.rootJobId && <div><dt>{t('rootJobIdLabel')}</dt><dd>{workflow.workflow.rootJobId}</dd></div>}
               </dl>
             </details>
           )}
@@ -164,7 +242,8 @@ export function App() {
           <ErrorNotice error={workflow.error} />
 
           {workflow.workflow?.jobId ? (
-            <JobPanel
+            <div className="job-stack">
+              <JobPanel
               client={client}
               jobId={workflow.workflow.jobId}
               job={monitor.job}
@@ -172,19 +251,39 @@ export function App() {
               artifacts={monitor.artifacts}
               transport={monitor.transport}
               monitorError={monitor.monitorError}
-              uploadId={workflow.workflow.uploadId}
-              uploadDeleted={Boolean(workflow.workflow.uploadDeletedAt)}
               sourcePageUrl={workflow.workflow.sourcePageUrl}
               selectedImageCount={workflow.workflow.fileNames.length}
               autoApplyInline={false}
-              canRequeue={Boolean(workflow.workflow.preflightId) && !workflow.workflow.uploadDeletedAt}
+              pageApplied={activePageApplied}
+              canRequeue={Boolean(workflow.workflow.preflightId)}
               requeueBusy={workflow.phase === 'checking'}
               onReset={() => void workflow.reset()}
+              onDiscardMissingJob={() => void workflow.discardMissingJob()}
               onJobReplaced={(jobId) => void workflow.replaceJob(jobId)}
               onRequeue={() => void workflow.requeueFromPreflight()}
-              onUploadDeleted={() => void workflow.markUploadDeleted()}
-              onApplyJob={activePage.url ? applyToActivePage : undefined}
-            />
+              onApplyJob={activePage.url && !monitor.job?.revision ? applyToActivePage : undefined}
+              onRestoreInline={activePage.url ? restoreActivePage : undefined}
+              onPageAppliedChange={setActivePageApplied}
+              textRegionPanel={monitor.job?.status === 'succeeded' ? (
+                <TextRegionInspectionPanel
+                  client={client}
+                  jobId={monitor.job.id}
+                  loadOriginalImage={activePage.url ? loadOriginalFromActivePage : undefined}
+                  onJobCreated={(job) => void workflow.replaceJob(job.id, job.revision?.rootJobId, job.revision?.parentJobId)}
+                />
+              ) : undefined}
+              pageRevisionPanel={monitor.job?.status === 'succeeded' ? (
+                <PageRevisionPanel
+                  client={client}
+                  rootJobId={monitor.job.revision?.rootJobId ?? workflow.workflow.rootJobId ?? monitor.job.id}
+                  parentJobId={monitor.job.id}
+                  currentJob={monitor.job}
+                  onJobCreated={(job) => void workflow.replaceJob(job.id, job.revision?.rootJobId, job.revision?.parentJobId)}
+                  onApplied={activePage.url ? applyRevisionsToActivePage : undefined}
+                />
+              ) : undefined}
+              />
+            </div>
           ) : workflow.preflight ? (
             <div className="content-stack">
               <PreflightReview preflight={workflow.preflight} onMove={workflow.moveImage} />
@@ -226,6 +325,11 @@ export function App() {
         </>
       )}
       <footer>{t('footerPrivacy')}</footer>
+      <ScrollControls
+        containerRef={scrollContainerRef}
+        className="popup-scroll-controls"
+        label={t('popupScrollControls')}
+      />
     </main>
   );
 }

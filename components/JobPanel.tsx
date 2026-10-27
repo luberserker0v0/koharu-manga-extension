@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { BackendClient, DownloadedArtifact } from '../lib/api/backend-client';
+import { BackendApiError } from '../lib/api/errors';
 import type { MonitorTransport } from '../lib/api/job-monitor';
 import type { JobArtifact, JobEvent, JobResource } from '../lib/api/types';
 import { orderedTranslatedImages } from '../lib/artifacts/translated-images';
@@ -28,7 +29,9 @@ function formatJobDuration(milliseconds: number | null): string {
   return t('durationSeconds', String(duration.seconds));
 }
 
-export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, uploadId, uploadDeleted, sourcePageUrl, selectedImageCount, autoApplyInline = true, canRequeue = false, requeueBusy = false, onReset, onJobReplaced, onRequeue, onUploadDeleted, onApplyInline, onApplyJob, onRestoreInline }: {
+type WorkspaceTab = 'job' | 'artifacts' | 'events' | 'ocr' | 'revisions';
+
+export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, sourcePageUrl, selectedImageCount, autoApplyInline = true, pageApplied = false, canRequeue = false, requeueBusy = false, onReset, onDiscardMissingJob, onJobReplaced, onRequeue, onApplyInline, onApplyJob, onRestoreInline, onPageAppliedChange, textRegionPanel, pageRevisionPanel }: {
   client: BackendClient;
   jobId: string;
   job: JobResource | null;
@@ -36,32 +39,37 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   artifacts: JobArtifact[];
   transport: MonitorTransport;
   monitorError: unknown;
-  uploadId?: string;
-  uploadDeleted?: boolean;
   sourcePageUrl?: string;
   selectedImageCount?: number;
   autoApplyInline?: boolean;
+  pageApplied?: boolean;
   canRequeue?: boolean;
   requeueBusy?: boolean;
   onReset: () => void;
+  onDiscardMissingJob?: () => void;
   onJobReplaced?: (jobId: string) => void;
   onRequeue?: () => void;
-  onUploadDeleted?: () => void;
   onApplyInline?: (urls: string[]) => Promise<boolean>;
   onApplyJob?: (jobId: string) => Promise<boolean>;
-  onRestoreInline?: () => void;
+  onRestoreInline?: () => void | Promise<void>;
+  onPageAppliedChange?: (applied: boolean) => void;
+  textRegionPanel?: ReactNode;
+  pageRevisionPanel?: ReactNode;
 }) {
   const [actionError, setActionError] = useState<unknown>(null);
   const [canceling, setCanceling] = useState(false);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [inlineArtifact, setInlineArtifact] = useState<number | null>(null);
-  const [jobAction, setJobAction] = useState<'retry' | 'resume' | 'cleanup' | null>(null);
-  const [uploadRemoved, setUploadRemoved] = useState(Boolean(uploadDeleted));
+  const [jobAction, setJobAction] = useState<'retry' | 'resume' | null>(null);
   const [clock, setClock] = useState(() => Date.now());
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('job');
   const automaticInlineAttempt = useRef<string | null>(null);
   const artifactCache = useRef(new Map<number, DownloadedArtifact>());
-  useEffect(() => setUploadRemoved(Boolean(uploadDeleted)), [jobId, uploadDeleted]);
   useEffect(() => { artifactCache.current.clear(); }, [jobId]);
+  useEffect(() => {
+    if (activeTab === 'ocr' && !textRegionPanel) setActiveTab('job');
+    if (activeTab === 'revisions' && !pageRevisionPanel) setActiveTab('job');
+  }, [activeTab, pageRevisionPanel, textRegionPanel]);
   useEffect(() => {
     if (!job || normalizeJobState(job).terminal) return;
     setClock(Date.now());
@@ -83,7 +91,10 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
     setActionError(null);
     try {
       if (onApplyJob) {
-        if (await onApplyJob(jobId)) setInlineArtifact(artifact.id);
+        if (await onApplyJob(jobId)) {
+          setInlineArtifact(artifact.id);
+          onPageAppliedChange?.(true);
+        }
       } else if (onApplyInline) {
         const manifest = await client.getTranslatedImages(jobId);
         const images = orderedTranslatedImages(manifest, selectedImageCount ?? 0);
@@ -94,10 +105,28 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
           reader.addEventListener('error', () => reject(reader.error ?? new Error('artifact_read_failed')));
           reader.readAsDataURL(blob);
         })));
-        if (await onApplyInline(urls)) setInlineArtifact(artifact.id);
+        if (await onApplyInline(urls)) {
+          setInlineArtifact(artifact.id);
+          onPageAppliedChange?.(true);
+        }
       }
     } catch (error) { setActionError(error); }
     finally { setDownloading(null); }
+  };
+
+  const restoreInline = async (artifact: JobArtifact) => {
+    if (!onRestoreInline) return;
+    setDownloading(artifact.id);
+    setActionError(null);
+    try {
+      await onRestoreInline();
+      setInlineArtifact(null);
+      onPageAppliedChange?.(false);
+    } catch (error) {
+      setActionError(error);
+    } finally {
+      setDownloading(null);
+    }
   };
 
   useEffect(() => {
@@ -110,6 +139,25 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
     automaticInlineAttempt.current = attemptKey;
     void applyInline(artifact);
   }, [job?.status, jobId, artifacts, onApplyInline, onApplyJob, autoApplyInline]);
+
+  const missingJob = !job && monitorError instanceof BackendApiError && monitorError.status === 404;
+  if (missingJob) {
+    return (
+      <section className="panel centered-panel">
+        <h2>{t('missingJobTitle')}</h2>
+        <p className="muted">{t('missingJobDescription', jobId)}</p>
+        <ErrorNotice error={monitorError} />
+        <div className="button-row">
+          <button className="primary-button" type="button" onClick={onDiscardMissingJob ?? onReset}>{t('discardMissingJob')}</button>
+          {canRequeue && onRequeue && (
+            <button className="secondary-button" type="button" disabled={requeueBusy} onClick={onRequeue}>
+              {requeueBusy ? t('requeueingTranslation') : t('requeueTranslation')}
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   if (!job) {
     return (
@@ -153,19 +201,38 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
     } catch (error) { setActionError(error); }
     finally { setJobAction(null); }
   };
-  const cleanupUpload = async () => {
-    if (!uploadId || !confirm(t('confirmDeleteUpload'))) return;
-    setJobAction('cleanup');
-    setActionError(null);
-    try {
-      await client.deleteUpload(uploadId);
-      setUploadRemoved(true);
-      onUploadDeleted?.();
-    } catch (error) { setActionError(error); }
-    finally { setJobAction(null); }
-  };
+  const tabs: Array<{ id: WorkspaceTab; label: string; count?: number }> = [
+    { id: 'job', label: t('workspaceTabJob') },
+    { id: 'artifacts', label: t('workspaceTabArtifacts'), count: artifacts.length },
+    { id: 'events', label: t('workspaceTabEvents'), count: events.length },
+    ...(textRegionPanel ? [{ id: 'ocr' as const, label: t('workspaceTabOcr') }] : []),
+    ...(pageRevisionPanel ? [{ id: 'revisions' as const, label: t('workspaceTabRevisions') }] : []),
+  ];
   return (
-    <div className="job-stack">
+    <div className="job-workspace">
+      <div className="workspace-tab-list" role="tablist" aria-label={t('workspaceTabsLabel')}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`workspace-panel-${tab.id}`}
+            id={`workspace-tab-${tab.id}`}
+            className={activeTab === tab.id ? 'active' : ''}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}{tab.count === undefined ? null : <span>{tab.count}</span>}
+          </button>
+        ))}
+      </div>
+      <div
+        className="workspace-tab-panel workspace-tab-panel-job"
+        role="tabpanel"
+        id="workspace-panel-job"
+        aria-labelledby="workspace-tab-job"
+        hidden={activeTab !== 'job'}
+      >
       <section className="panel job-summary" aria-labelledby="job-title">
         <div className="panel-heading">
           <div>
@@ -177,6 +244,8 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
         <dl className="job-facts">
           <div><dt>{t('jobTypeLabel')}</dt><dd>{job.type || t('notAvailable')}</dd></div>
           <div><dt>{t('jobIdLabel')}</dt><dd title={job.id}>{job.id}</dd></div>
+          {job.revision && <div><dt>{t('rootJobIdLabel')}</dt><dd title={job.revision.rootJobId}>{job.revision.rootJobId}</dd></div>}
+          {job.revision && <div><dt>{t('retranslationPageCountLabel')}</dt><dd>{job.revision.sourceImageIds.length}</dd></div>}
           {sourcePageUrl && <div><dt>{t('jobTargetUrlLabel')}</dt><dd title={sourcePageUrl}><a href={sourcePageUrl} target="_blank" rel="noreferrer">{sourcePageUrl}</a></dd></div>}
           <div><dt>{t('jobStageLabel')}</dt><dd>{job.stage || t('notAvailable')}</dd></div>
           <div><dt>{t('jobUpdatedLabel')}</dt><dd>{formatLocalDate(job.updatedAt)}</dd></div>
@@ -214,13 +283,17 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
           {(job.status === 'failed' || job.status === 'blocked') && (
             <button className="secondary-button" type="button" disabled={jobAction !== null} onClick={() => void createAttempt('retry')}>{jobAction === 'retry' ? t('retryingJob') : t('retryJob')}</button>
           )}
-          {view.terminal && uploadId && !uploadRemoved && (
-            <button className="secondary-button danger-button" type="button" disabled={jobAction !== null} onClick={() => void cleanupUpload()}>{jobAction === 'cleanup' ? t('deletingUpload') : t('deleteSourceUpload')}</button>
-          )}
-          {uploadRemoved && <span className="cleanup-status">{t('sourceUploadDeleted')}</span>}
         </div>
       </section>
+      </div>
 
+      <div
+        className="workspace-tab-panel workspace-tab-panel-artifacts"
+        role="tabpanel"
+        id="workspace-panel-artifacts"
+        aria-labelledby="workspace-tab-artifacts"
+        hidden={activeTab !== 'artifacts'}
+      >
       <section className="panel" aria-labelledby="artifacts-title">
         <div className="panel-heading"><h2 id="artifacts-title">{t('artifactsTitle')}</h2><span className="count-badge">{artifacts.length}</span></div>
         {view.terminal && artifacts.length === 0 ? (
@@ -235,19 +308,27 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
                 <button type="button" onClick={() => void download(artifact)} disabled={downloading === artifact.id}>
                   {downloading === artifact.id ? t('downloadingArtifact') : t('downloadArtifact')}
                 </button>
-                {(onApplyInline || onApplyJob) && artifact.kind === 'export' && inlineArtifact !== artifact.id && (
+                {(onApplyInline || onApplyJob) && artifact.kind === 'export' && !pageApplied && inlineArtifact !== artifact.id && (
                   <button type="button" onClick={() => void applyInline(artifact)} disabled={downloading === artifact.id}>{t('applyInline')}</button>
                 )}
-                {onRestoreInline && inlineArtifact === artifact.id && (
-                  <button type="button" onClick={() => { onRestoreInline(); setInlineArtifact(null); }}>{t('restoreOriginal')}</button>
+                {onRestoreInline && (pageApplied || inlineArtifact === artifact.id) && artifact.kind === 'export' && (
+                  <button type="button" disabled={downloading === artifact.id} onClick={() => void restoreInline(artifact)}>{t('restoreOriginal')}</button>
                 )}
               </li>
             ))}
           </ul>
         )}
       </section>
+      </div>
 
-      <section className="panel" aria-labelledby="events-title">
+      <div
+        className="workspace-tab-panel workspace-tab-panel-events"
+        role="tabpanel"
+        id="workspace-panel-events"
+        aria-labelledby="workspace-tab-events"
+        hidden={activeTab !== 'events'}
+      >
+      <section className="panel workspace-events" aria-labelledby="events-title">
         <div className="panel-heading"><h2 id="events-title">{t('eventsTitle')}</h2><span className="count-badge">{events.length}</span></div>
         {events.length > 0 && <p className="event-order-note">{t('eventsNewestFirst')}</p>}
         {events.length === 0 ? <div className="empty-state">{t('eventsEmpty')}</div> : (
@@ -290,6 +371,17 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
           </ol>
         )}
       </section>
+      </div>
+      {textRegionPanel && (
+        <div className="workspace-tab-panel workspace-tab-panel-ocr" role="tabpanel" id="workspace-panel-ocr" aria-labelledby="workspace-tab-ocr" hidden={activeTab !== 'ocr'}>
+          {textRegionPanel}
+        </div>
+      )}
+      {pageRevisionPanel && (
+        <div className="workspace-tab-panel workspace-tab-panel-revisions" role="tabpanel" id="workspace-panel-revisions" aria-labelledby="workspace-tab-revisions" hidden={activeTab !== 'revisions'}>
+          {pageRevisionPanel}
+        </div>
+      )}
     </div>
   );
 }

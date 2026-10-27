@@ -33,6 +33,55 @@ describe('BackendClient', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer secret');
   });
 
+  it('uses the versioned readiness route before runtime inspection', async () => {
+    const readiness = {
+      ok: true,
+      status: 'degraded',
+      checkedAt: '2026-10-27T00:00:00.000Z',
+      deploymentMode: 'docker',
+      services: {
+        backend: { required: true, ready: true, status: 'ready' },
+        koharu: { required: true, ready: true, status: 'running', mode: 'external' },
+        ao: { required: false, ready: false, status: 'unavailable' },
+      },
+      capabilities: { koharuJobs: true, aoJobs: false },
+      blockers: [],
+      warnings: [{ service: 'ao', code: 'ao_unavailable', message: 'AO is unavailable.' }],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(readiness), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: 'secret' });
+
+    await expect(client.readiness()).resolves.toEqual(readiness);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/ready');
+  });
+
+  it('returns a structured blocked readiness response from HTTP 503', async () => {
+    const readiness = {
+      ok: false,
+      status: 'blocked',
+      checkedAt: '2026-10-27T00:00:00.000Z',
+      deploymentMode: 'docker',
+      services: {
+        backend: { required: true, ready: true, status: 'ready' },
+        koharu: { required: true, ready: false, status: 'unavailable', mode: 'external' },
+        ao: { required: false, ready: true, status: 'ready' },
+      },
+      capabilities: { koharuJobs: false, aoJobs: true },
+      blockers: [{ service: 'koharu', code: 'koharu_unavailable', message: 'Koharu is unavailable.' }],
+      warnings: [],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(readiness), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+
+    await expect(client.readiness()).resolves.toEqual(readiness);
+  });
+
   it('routes content-script requests through the background without exposing the token', async () => {
     const sendMessage = vi.fn().mockResolvedValue({
       status: 200,
@@ -144,7 +193,7 @@ describe('BackendClient', () => {
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST');
   });
 
-  it('deletes a retained upload only through the upload API', async () => {
+  it('deletes an abandoned pre-preflight upload only through the upload API', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
     await client.deleteUpload('upload-1');
@@ -188,6 +237,7 @@ describe('BackendClient', () => {
   it('lists translated images and downloads image content through versioned routes', async () => {
     const image = {
       id: 'page-0001-abcd', index: 0, fileName: 'page-001.png', mediaType: 'image/png', size: 4,
+      sourceImageId: 'source-1', sourceOrderIndex: 0, revisionId: 'revision-1', revisionNumber: 1, active: true,
       encodedUrl: '/api/v1/jobs/job-1/translated-images/page-0001-abcd',
       contentUrl: '/api/v1/jobs/job-1/translated-images/page-0001-abcd/content',
     };
@@ -204,5 +254,118 @@ describe('BackendClient', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job-1/translated-images');
     expect(fetchMock.mock.calls[1]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job-1/translated-images/page-0001-abcd/content');
     expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Authorization')).toBe('Bearer secret');
+  });
+
+  it('creates a selective retranslation with only explicit overrides', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      id: 'job-revision-1',
+      status: 'queued',
+      revision: {
+        rootJobId: 'job-root',
+        parentJobId: 'job-parent',
+        reason: 'selective_retranslation',
+        sourceImageIds: ['source-3'],
+      },
+    }), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+
+    await client.createRetranslation('job/parent', {
+      sourceImageIds: ['source-3'],
+      instructions: 'Preserve the name Koharu.',
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Fparent/retranslations');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ sourceImageIds: ['source-3'], instructions: 'Preserve the name Koharu.' }),
+    });
+  });
+
+  it('reads text regions and queues a batch correction through versioned routes', async () => {
+    const snapshot = {
+      jobId: 'job-parent',
+      rootJobId: 'job-root',
+      snapshotFingerprint: 'snapshot-1',
+      pages: [],
+    };
+    const queued = {
+      id: 'job-correction',
+      type: 'translation',
+      status: 'queued',
+      stage: 'queued',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(snapshot), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(queued), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+    const correction = {
+      pages: [{
+        sourceImageId: 'source/1',
+        baseRegionSetRevisionId: 'region-set-1',
+        regions: [{ regionId: 'region-1', sourceText: 'intergalactic' }],
+      }],
+    };
+
+    await expect(client.getTextRegions('job/parent', 'source/1')).resolves.toEqual(snapshot);
+    await expect(client.createTextRegionCorrection('job/parent', correction)).resolves.toEqual(queued);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Fparent/text-regions?sourceImageId=source%2F1');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Fparent/text-region-corrections');
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(correction),
+    });
+  });
+
+  it('reads and atomically activates page revisions', async () => {
+    const manifest = {
+      rootJobId: 'job-root',
+      sourcePreflightId: 'preflight-1',
+      pageCount: 1,
+      pages: [{ sourceImageId: 'source-1', sourceOrderIndex: 0, activeRevisionId: 'revision-1', revisions: [] }],
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(manifest), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(manifest), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+
+    await expect(client.getPageRevisions('job-root')).resolves.toEqual(manifest);
+    await expect(client.activatePageRevisions('job-root', [{ sourceImageId: 'source-1', revisionId: 'revision-1' }]))
+      .resolves.toEqual(manifest);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job-root/page-revisions');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job-root/page-revisions/activate');
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ selections: [{ sourceImageId: 'source-1', revisionId: 'revision-1' }] }),
+    });
+  });
+
+  it('downloads revision image bytes through the producing job API', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('page', {
+      status: 200,
+      headers: { 'Content-Type': 'image/webp' },
+    }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: 'secret' });
+
+    const blob = await client.downloadPageRevisionImage({
+      revisionId: 'revision-2',
+      revisionNumber: 2,
+      active: false,
+      jobId: 'job/revision',
+      createdAt: '2026-10-19T00:00:00.000Z',
+      image: {
+        id: 'image/revision-2',
+        index: 0,
+        fileName: 'page.webp',
+        mediaType: 'image/webp',
+        size: 4,
+        encodedUrl: '/ignored',
+        contentUrl: '/ignored',
+      },
+    });
+
+    expect(blob.type).toBe('image/webp');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Frevision/translated-images/image%2Frevision-2/content');
   });
 });

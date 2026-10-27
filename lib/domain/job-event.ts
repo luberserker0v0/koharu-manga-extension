@@ -49,8 +49,8 @@ function progressText(payload: Record<string, unknown>): string | null {
   if (explicitPercent !== null) return formatPercent(explicitPercent);
   const ratio = numeric(payload.progress);
   if (ratio !== null) return formatPercent(ratio >= 0 && ratio <= 1 ? ratio * 100 : ratio);
-  const current = firstText(payload, ['current', 'completed', 'processed']);
-  const total = firstText(payload, ['total', 'count']);
+  const current = firstText(payload, ['currentPageIndex', 'completedPages', 'current', 'completed', 'processed']);
+  const total = firstText(payload, ['totalPages', 'total', 'count']);
   return current && total ? `${current}/${total}` : null;
 }
 

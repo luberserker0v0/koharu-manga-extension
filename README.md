@@ -18,7 +18,9 @@ A WXT browser extension for the Manga Translation Backend. It talks only to the 
 - English and Traditional Chinese extension i18n
 - Per-site floating page translation with lazy-image scanning and review, covering `<img>`, `<picture>` sources, shadow-DOM images, video posters, CSS background images, and canvas snapshots; PDFs and browser-internal pages are unsupported
 - Optional approved ComicCrawler adapters with safe generic DOM fallback
+- ComicCrawler Browser Client SDK v0.2.0 in `existing-tab` mode, prepared automatically in the background for the active tab
 - Ordered multi-image inline replacement through the backend `translated-images` API, with original-image restoration
+- Selective page retranslation with inherited job settings, correction instructions, immutable page-version history, preview, activation, and rollback
 
 The popup is a monitor/review/history surface. When no job or preflight is active it shows an empty state that directs users to the on-page translator.
 
@@ -26,13 +28,13 @@ The popup is a monitor/review/history surface. When no job or preflight is activ
 
 ### Manga Translation Backend (required)
 
-Run [koharu-manga-agent](https://github.com/luberserker0v0/koharu-manga-agent) before using translation features. By default, the extension expects its browser REST API at:
+Run [koharu-manga-agent](https://github.com/luberserker0v0/koharu-manga-agent) v0.3.0 or newer before using translation features. By default, the extension expects its browser REST API at:
 
 ```text
 http://127.0.0.1:4001/api/v1
 ```
 
-The backend must report a healthy `/health` response and a ready `/api/v1/runtime/status`. It owns all Koharu and AO communication, uploads, jobs, artifacts, and translated-image extraction. The extension never connects to Koharu or AO directly and never reads backend or Docker filesystem paths.
+The backend must report a healthy `/health`, a usable `/api/v1/ready` response, and a ready `/api/v1/runtime/status`. It owns all Koharu and AO communication, uploads, jobs, text-region snapshots, revisions, artifacts, and translated-image extraction. The extension never connects to Koharu or AO directly and never reads backend or Docker filesystem paths.
 
 If the backend requires authentication, configure its optional Bearer token in the extension settings. A different backend URL can also be configured there.
 
@@ -45,6 +47,8 @@ http://127.0.0.1:4100
 ```
 
 Enable ComicCrawler in the extension settings and configure Basic-auth credentials when required. The integration uses ComicCrawler's REST API, including `POST /api/adapters/chapter-images`; it never reads crawler output directories or executes adapter drafts. When ComicCrawler is disabled, unavailable, or has no matching adapter, the extension falls back to generic page image detection.
+
+To let ComicCrawler operate the active chapter tab, configure the Browser Client user ID/token when the Server uses token mode. Opening the extension or starting translation automatically enrolls the Browser Client when needed, connects it, and registers that active tab; these transport controls are not shown in the normal UI. The extension uses ComicCrawler Browser Client SDK v0.2.0 in `existing-tab` mode and never sends the native browser tab ID to the Server. Chrome/Edge 116 or newer is required for reliable MV3 WebSocket lifetime behavior. After the user completes a challenge, the background coordinator checks the same tab and resumes the same task automatically; it never solves CAPTCHA.
 
 For extension development, install Node.js and npm. Chrome or Edge is required to load and test the MV3 build.
 
@@ -87,6 +91,6 @@ The workflow can also be started from **Actions → Release extension → Run wo
 - `components`: focused feature UI
 - `entrypoints`: thin WXT startup and composition files
 
-See [docs/BACKEND_API.md](docs/BACKEND_API.md), [docs/COMIC_CRAWLER_API.md](docs/COMIC_CRAWLER_API.md), and [docs/IMMERSIVE_TRANSLATE_ANALYSIS.md](docs/IMMERSIVE_TRANSLATE_ANALYSIS.md) for the backend boundary, ComicCrawler integration contract, and page-translation design comparison.
+See [docs/BACKEND_API.md](docs/BACKEND_API.md), [docs/COMIC_CRAWLER_API.md](docs/COMIC_CRAWLER_API.md), [docs/COMIC_CRAWLER_BROWSER_CLIENT.md](docs/COMIC_CRAWLER_BROWSER_CLIENT.md), [docs/COMIC_CRAWLER_V0_2_INTEGRATION_REPORT.md](docs/COMIC_CRAWLER_V0_2_INTEGRATION_REPORT.md), and [docs/IMMERSIVE_TRANSLATE_ANALYSIS.md](docs/IMMERSIVE_TRANSLATE_ANALYSIS.md) for the backend boundary, ComicCrawler contracts, integration verification, and page-translation design comparison.
 
 Source uploads are intentionally not deleted when a translation finishes because post-edit and re-export workflows may still require them.

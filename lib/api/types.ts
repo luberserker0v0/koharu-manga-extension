@@ -1,4 +1,4 @@
-export type TranslationMode = 'quick';
+export type TranslationMode = 'quick' | 'reference_style' | 'local_style' | 'learning_style';
 export type ExportFormat = 'rendered' | 'psd' | 'khr' | 'inpainted';
 
 export interface TranslationTarget {
@@ -31,6 +31,39 @@ export interface TranslationProviderCatalog {
 
 export interface HealthResponse {
   ok: boolean;
+  deploymentMode?: string;
+}
+
+export interface ReadinessIssue {
+  service: string;
+  code: string;
+  message: string;
+}
+
+export interface ReadinessService {
+  required: boolean;
+  ready: boolean;
+  status: string;
+  mode?: string;
+  baseUrl?: string | null;
+}
+
+export interface ReadinessResponse {
+  ok: boolean;
+  status: 'ready' | 'degraded' | 'blocked' | string;
+  checkedAt: string;
+  deploymentMode: string;
+  services: {
+    backend: ReadinessService;
+    koharu: ReadinessService;
+    ao: ReadinessService;
+  };
+  capabilities: {
+    koharuJobs: boolean;
+    aoJobs: boolean;
+  };
+  blockers: ReadinessIssue[];
+  warnings: ReadinessIssue[];
 }
 
 export interface RuntimeServiceStatus {
@@ -107,6 +140,22 @@ export interface TranslationJobRequest {
   sourceLanguage?: string;
 }
 
+export interface SelectiveRetranslationRequest {
+  sourceImageIds: string[];
+  translationTarget?: TranslationTarget;
+  targetLanguage?: string;
+  sourceLanguage?: string;
+  instructions?: string;
+}
+
+export interface RevisionLineage {
+  rootJobId: string;
+  parentJobId: string;
+  reason: 'selective_retranslation' | 'text_region_correction';
+  sourceImageIds: string[];
+  baseRegionSetRevisionIds?: string[];
+}
+
 export type JobStatus =
   | 'queued'
   | 'waiting_dependency'
@@ -134,6 +183,7 @@ export interface JobResource {
   executionKind?: string;
   workflowId?: string | null;
   parentJobId?: string | null;
+  revision?: RevisionLineage | null;
   dependencyIds?: string[];
   blockedReason?: string | null;
   outcome?: 'clean' | 'warnings' | 'partial' | string | null;
@@ -183,14 +233,136 @@ export interface TranslatedImage {
   size: number;
   encodedUrl: string;
   contentUrl: string;
+  sourceImageId: string;
+  sourceOrderIndex: number;
+  revisionId: string;
+  revisionNumber: number;
+  active: boolean;
 }
 
 export interface TranslatedImagesEnvelope {
   jobId: string;
-  artifactId: number;
-  sourceFormat: 'image' | 'zip';
+  rootJobId: string;
+  artifactId?: number;
+  sourceFormat?: 'image' | 'zip';
   count: number;
   images: TranslatedImage[];
+}
+
+export interface PageRevisionImage {
+  id: string;
+  index: number;
+  fileName: string;
+  mediaType: string;
+  size: number;
+  encodedUrl: string;
+  contentUrl: string;
+}
+
+export interface PageRevision {
+  revisionId: string;
+  revisionNumber: number;
+  active: boolean;
+  jobId: string;
+  parentJobId?: string | null;
+  translationTarget?: TranslationTarget | null;
+  sourceLanguage?: string | null;
+  targetLanguage?: string | null;
+  instructions?: string | null;
+  createdAt: string;
+  image: PageRevisionImage;
+}
+
+export interface PageRevisionEntry {
+  sourceImageId: string;
+  sourceOrderIndex: number;
+  sourceFileName?: string;
+  activeRevisionId: string | null;
+  revisions: PageRevision[];
+}
+
+export interface PageRevisionManifest {
+  rootJobId: string;
+  sourcePreflightId: string;
+  pageCount: number;
+  pages: PageRevisionEntry[];
+}
+
+export interface PageRevisionSelection {
+  sourceImageId: string;
+  revisionId: string;
+}
+
+export interface TextRegionGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
+export interface TextRegion {
+  id: string;
+  readingOrder: number;
+  geometry: TextRegionGeometry;
+  sourceText: string;
+  translatedText: string;
+  ocrConfidence?: number;
+  sourceDirection?: string;
+}
+
+export interface TextRegionCoordinateSpace {
+  kind: 'source_image_pixels';
+  origin: 'top_left';
+  width: number;
+  height: number;
+  rotationUnit: 'degrees_clockwise';
+}
+
+export interface TextRegionPage {
+  sourceImageId: string;
+  sourceOrderIndex: number;
+  sourceFileName: string;
+  pageRevisionId: string;
+  regionSetRevisionId: string;
+  coordinateSpace: TextRegionCoordinateSpace;
+  regions: TextRegion[];
+}
+
+export interface TextRegionSnapshot {
+  jobId: string;
+  rootJobId: string;
+  snapshotFingerprint: string;
+  pages: TextRegionPage[];
+}
+
+export interface TextRegionCorrectionGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+}
+
+export interface TextRegionCorrection {
+  regionId: string;
+  sourceText?: string;
+  geometry?: TextRegionCorrectionGeometry;
+}
+
+export interface TextRegionPageCorrection {
+  sourceImageId: string;
+  baseRegionSetRevisionId: string;
+  regions: TextRegionCorrection[];
+}
+
+export interface TextRegionCorrectionRequest {
+  pages: TextRegionPageCorrection[];
+  translationTarget?: TranslationTarget;
+  sourceLanguage?: string;
+  targetLanguage?: string;
+  instructions?: string;
+  generationOptions?: Record<string, unknown>;
 }
 
 export interface UploadProgress {
@@ -216,4 +388,6 @@ export interface ComicCrawlerSettings {
   baseUrl: string;
   username: string;
   password: string;
+  userId: string;
+  userToken: string;
 }

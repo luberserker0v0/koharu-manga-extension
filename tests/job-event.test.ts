@@ -52,4 +52,20 @@ describe('job event presentation', () => {
       type: 'job.progress', createdAt: '2026-01-01T00:00:00Z', payload: { percent: 1 },
     }).metadata).toContainEqual({ kind: 'progress', value: '1%' });
   });
+
+  it('uses v2 one-based page progress without adding the active page twice', () => {
+    expect(presentJobEvent({
+      type: 'pipeline.progress',
+      createdAt: '2026-01-01T00:00:00Z',
+      payload: { progressSemanticsVersion: 2, currentPageIndex: 12, completedPages: 11, totalPages: 20 },
+    }).metadata).toContainEqual({ kind: 'progress', value: '12/20' });
+  });
+
+  it('reports the backend terminal v2 progress as complete', () => {
+    expect(presentJobEvent({
+      type: 'pipeline.progress',
+      createdAt: '2026-01-01T00:00:00Z',
+      payload: { progressSemanticsVersion: 2, completedPages: 20, totalPages: 20, status: 'completed' },
+    }).metadata).toContainEqual({ kind: 'progress', value: '20/20' });
+  });
 });

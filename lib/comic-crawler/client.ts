@@ -1,12 +1,47 @@
 import type { ComicCrawlerSettings } from '../api/types';
 import { normalizeServiceBaseUrl } from '../api/url';
-import { ComicCrawlerError } from './errors';
-import type { AdapterDiscoveryFeature, AdapterResolution, ChapterImagesResponse, DiscoveryQueued } from './types';
+import { ChapterImagesVerificationRequiredError, ComicCrawlerError } from './errors';
+import type {
+  AdapterDiscoveryFeature,
+  AdapterResolution,
+  BrowserTarget,
+  ChallengeDiscoveryJob,
+  ChapterRenderContext,
+  ChapterImagesResponse,
+  ChapterImagesProxyResponse,
+  ChapterImagesVerificationData,
+  CreateCrawlerTaskResponse,
+  CrawlerTaskDetail,
+  DiscoveryQueued,
+  RebindBrowserTargetResponse,
+} from './types';
 
 interface Envelope<T> { data?: T }
 
 interface ComicCrawlerClientOptions {
   useBackgroundProxy?: boolean;
+}
+
+interface ChapterImagesOptions {
+  signal?: AbortSignal;
+  browserTarget?: BrowserTarget;
+  renderContext?: ChapterRenderContext;
+  challengeDiscoveryId?: string;
+}
+
+function chapterImagesVerificationData(value: unknown): ChapterImagesVerificationData | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Partial<ChapterImagesVerificationData>;
+  const challenge = data.challenge;
+  if (data.status !== 'verification_required'
+    || typeof data.challengeDiscoveryId !== 'string' || !data.challengeDiscoveryId
+    || typeof data.challengeStatus !== 'string' || !data.challengeStatus
+    || !challenge || typeof challenge !== 'object'
+    || typeof challenge.id !== 'string' || challenge.id !== data.challengeDiscoveryId
+    || typeof challenge.status !== 'string' || !challenge.status
+    || typeof challenge.normalizedUrl !== 'string' || !challenge.normalizedUrl
+    || typeof challenge.retryableAfterVerification !== 'boolean') return undefined;
+  return data as ChapterImagesVerificationData;
 }
 
 function basicAuth(username: string, password: string): string {
@@ -17,11 +52,15 @@ function basicAuth(username: string, password: string): string {
 export class ComicCrawlerClient {
   readonly baseUrl: string;
   private readonly authorization: string | null;
+  private readonly userId: string | null;
   private readonly useBackgroundProxy: boolean;
 
   constructor(settings: ComicCrawlerSettings, options: ComicCrawlerClientOptions = {}) {
     this.baseUrl = normalizeServiceBaseUrl(settings.baseUrl);
-    this.authorization = settings.username ? basicAuth(settings.username, settings.password) : null;
+    this.authorization = settings.userId && settings.userToken
+      ? `Bearer ${settings.userToken}`
+      : settings.username ? basicAuth(settings.username, settings.password) : null;
+    this.userId = settings.userId || null;
     this.useBackgroundProxy = options.useBackgroundProxy === true;
   }
 
@@ -34,6 +73,7 @@ export class ComicCrawlerClient {
     if (url.origin !== new URL(this.baseUrl).origin) throw new ComicCrawlerError('ComicCrawler returned an untrusted content URL.', 'contract');
     const headers = new Headers(init.headers);
     if (this.authorization) headers.set('Authorization', this.authorization);
+    if (this.userId) headers.set('X-ComicCrawler-User-Id', this.userId);
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     let response: Response;
     try { response = await fetch(url, { ...init, headers }); }
@@ -42,10 +82,25 @@ export class ComicCrawlerClient {
       throw new ComicCrawlerError('ComicCrawler could not be reached.', 'network');
     }
     if (!response.ok) {
+      const payload = await response.clone().json().catch(() => undefined) as
+        | { error?: unknown; code?: unknown; data?: unknown }
+        | undefined;
+      const serverMessage = typeof payload?.error === 'string' ? payload.error : undefined;
+      const serverCode = typeof payload?.code === 'string' ? payload.code : undefined;
+      if (response.status === 409 && serverCode === 'CHAPTER_IMAGES_VERIFICATION_REQUIRED') {
+        const verification = chapterImagesVerificationData(payload?.data);
+        if (verification) {
+          throw new ChapterImagesVerificationRequiredError(
+            serverMessage || 'Human verification is required.',
+            verification,
+          );
+        }
+      }
       throw new ComicCrawlerError(
-        `ComicCrawler request failed with HTTP ${response.status}.`,
+        serverMessage || `ComicCrawler request failed with HTTP ${response.status}.`,
         'api',
         response.status,
+        serverCode,
       );
     }
     return response;
@@ -76,16 +131,50 @@ export class ComicCrawlerClient {
     return this.json('/api/adapters/resolve', { method: 'POST', body: JSON.stringify({ url, mode: 'chapters' }), signal });
   }
 
-  async extractChapterImages(url: string, signal?: AbortSignal): Promise<ChapterImagesResponse> {
-    const result = this.useBackgroundProxy
-      ? await this.proxy<ChapterImagesResponse>('COMIC_CRAWLER_CHAPTER_IMAGES', { url })
+  async extractChapterImages(url: string, options: ChapterImagesOptions = {}): Promise<ChapterImagesResponse> {
+    const proxied = this.useBackgroundProxy
+      ? await this.proxy<ChapterImagesProxyResponse>('COMIC_CRAWLER_CHAPTER_IMAGES', {
+          url,
+          ...(options.renderContext ? { renderContext: options.renderContext } : {}),
+          ...(options.challengeDiscoveryId ? { challengeDiscoveryId: options.challengeDiscoveryId } : {}),
+        })
       : await this.json<ChapterImagesResponse>('/api/adapters/chapter-images', {
           method: 'POST',
-          body: JSON.stringify({ url }),
-          signal,
+          body: JSON.stringify({
+            url,
+            ...(options.browserTarget ? { browserTarget: options.browserTarget } : {}),
+            ...(options.renderContext ? { renderContext: options.renderContext } : {}),
+            ...(options.challengeDiscoveryId ? { challengeDiscoveryId: options.challengeDiscoveryId } : {}),
+          }),
+          signal: options.signal,
         });
-    if (!Array.isArray(result.imageUrls) || result.imageUrlCount !== result.imageUrls.length) {
+    if (proxied && typeof proxied === 'object' && 'kind' in proxied && proxied.kind === 'verification_required') {
+      const verification = chapterImagesVerificationData(proxied.data);
+      if (!verification) throw new ComicCrawlerError('ComicCrawler returned an invalid verification handoff.', 'contract');
+      throw new ChapterImagesVerificationRequiredError(
+        proxied.message || 'Human verification is required.',
+        verification,
+      );
+    }
+    const result = proxied as ChapterImagesResponse;
+    if (!Array.isArray(result.imageUrls) || result.imageUrlCount !== result.imageUrls.length
+      || !result.chapter || typeof result.chapter.id !== 'string' || !result.chapter.id
+      || typeof result.chapter.canonicalUrl !== 'string' || !result.chapter.canonicalUrl
+      || result.chapter.stability !== 'deterministic'
+      || !['adapter', 'normalized-url'].includes(result.chapter.identitySource)
+      || !Array.isArray(result.images) || result.images.length !== result.imageUrls.length
+      || result.images.some((image, index) => !image || typeof image.id !== 'string' || !image.id
+        || image.orderIndex !== index || image.url !== result.imageUrls[index]
+        || (image.sourceFingerprint !== undefined
+          && (typeof image.sourceFingerprint !== 'string'
+            || !/^(?:sha256|etag|opaque):.+/i.test(image.sourceFingerprint))))
+      || new Set(result.images.map((image) => image.id)).size !== result.images.length) {
       throw new ComicCrawlerError('ComicCrawler returned an invalid chapter-image count.', 'contract');
+    }
+    try {
+      new URL(result.chapter.canonicalUrl);
+    } catch {
+      throw new ComicCrawlerError('ComicCrawler returned an invalid canonical chapter URL.', 'contract');
     }
     return result;
   }
@@ -102,4 +191,66 @@ export class ComicCrawlerClient {
     if (typeof id !== 'string' || !id) throw new ComicCrawlerError('ComicCrawler did not return a discovery ID.', 'contract');
     return { discoveryId: id, feature };
   }
+
+  createExistingTabTask(url: string, browserTarget: BrowserTarget, signal?: AbortSignal): Promise<CreateCrawlerTaskResponse> {
+    return this.json<CreateCrawlerTaskResponse>('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        url,
+        mode: 'chapters',
+        chapterUrls: [url],
+        browserTarget,
+      }),
+      signal,
+    });
+  }
+
+  getTask(taskId: string, signal?: AbortSignal): Promise<CrawlerTaskDetail> {
+    return this.json<CrawlerTaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal });
+  }
+
+  rebindBrowserTarget(
+    taskId: string,
+    expectedBrowserTarget: BrowserTarget,
+    browserTarget: BrowserTarget,
+    signal?: AbortSignal,
+  ): Promise<RebindBrowserTargetResponse> {
+    return this.json<RebindBrowserTargetResponse>(
+      `/api/tasks/${encodeURIComponent(taskId)}/rebind-browser-target`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ expectedBrowserTarget, browserTarget }),
+        signal,
+      },
+    );
+  }
+
+  async cancelTask(taskId: string, signal?: AbortSignal): Promise<void> {
+    await this.json(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST', signal });
+  }
+
+  async resumeTask(taskId: string, signal?: AbortSignal): Promise<void> {
+    await this.json(`/api/tasks/${encodeURIComponent(taskId)}/resume`, { method: 'POST', signal });
+  }
+
+  async openVerification(challengeDiscoveryId: string, signal?: AbortSignal): Promise<void> {
+    await this.json(`/api/challenge-discovery/${encodeURIComponent(challengeDiscoveryId)}/open-browser`, { method: 'POST', signal });
+  }
+
+  getVerification(challengeDiscoveryId: string, signal?: AbortSignal): Promise<ChallengeDiscoveryJob> {
+    return this.json<ChallengeDiscoveryJob>(`/api/challenge-discovery/${encodeURIComponent(challengeDiscoveryId)}`, { signal });
+  }
+
+  async completeVerification(challengeDiscoveryId: string, signal?: AbortSignal): Promise<ChallengeDiscoveryJob> {
+    return await this.json<ChallengeDiscoveryJob>(`/api/challenge-discovery/${encodeURIComponent(challengeDiscoveryId)}/complete-human-verification`, {
+      method: 'POST',
+      body: JSON.stringify({ settle: true, allowNavigate: false }),
+      signal,
+    });
+  }
+
+  async cancelVerification(challengeDiscoveryId: string, signal?: AbortSignal): Promise<void> {
+    await this.json(`/api/challenge-discovery/${encodeURIComponent(challengeDiscoveryId)}`, { method: 'DELETE', signal });
+  }
+
 }

@@ -43,9 +43,65 @@
   "comicCrawlerUsernameLabel": { "message": "Basic 驗證使用者名稱" },
   "comicCrawlerPasswordLabel": { "message": "Basic 驗證密碼" },
   "comicCrawlerAuthHelp": { "message": "憑證只儲存在擴充功能本機儲存區，不會顯示給網頁。" },
+  "browserClientCredentialsTitle": { "message": "Browser Client 註冊" },
+  "browserClientCredentialsHelp": { "message": "用於 SDK 註冊及需要驗證的 ComicCrawler REST 請求。只有 Server 使用公開模式時，才將兩欄都留空。" },
+  "browserClientUserIdLabel": { "message": "ComicCrawler 使用者 ID" },
+  "browserClientUserTokenLabel": { "message": "ComicCrawler 使用者 API 權杖" },
   "saveSettings": { "message": "儲存設定" },
   "savingSettings": { "message": "正在儲存…" },
   "settingsSaved": { "message": "設定已儲存。" },
+
+  "browserClientLoading": { "message": "正在載入 Browser Client…" },
+  "browserClientEyebrow": { "message": "ComicCrawler Browser Client" },
+  "browserClientTitle": { "message": "使用目前分頁" },
+  "browserClientStatus_not_enrolled": { "message": "尚未註冊" },
+  "browserClientStatus_disconnected": { "message": "已註冊 · 未連線" },
+  "browserClientStatus_connecting": { "message": "正在連線…" },
+  "browserClientStatus_connected": { "message": "已連線" },
+  "browserClientStatus_error": { "message": "連線錯誤" },
+  "browserClientWorkerId": { "message": "Worker ID" },
+  "browserClientResourceId": { "message": "Resource ID" },
+  "browserClientApprovedPage": { "message": "已授權分頁" },
+  "browserClientEnroll": { "message": "註冊" },
+  "browserClientEnrolling": { "message": "正在註冊…" },
+  "browserClientConnect": { "message": "連線" },
+  "browserClientConnecting": { "message": "正在連線…" },
+  "browserClientDisconnect": { "message": "中斷連線" },
+  "browserClientLogout": { "message": "清除憑證" },
+  "browserClientUseCurrentTab": { "message": "使用目前分頁" },
+  "browserClientRegisteringTab": { "message": "正在註冊分頁…" },
+  "browserClientCreateTask": { "message": "建立章節圖片任務" },
+  "browserClientDiscoveryConfirm": { "message": "目前頁面沒有相符且已核准的章節圖片轉接器。要請 ComicCrawler 只針對此頁排入轉接器探索嗎？產生的草稿仍須在 ComicCrawler WebUI 審核。" },
+  "browserClientCreatingTask": { "message": "正在建立任務…" },
+  "browserClientTaskTitle": { "message": "爬蟲任務" },
+  "browserClientTaskId": { "message": "任務／探索 ID" },
+  "browserClientTaskUrl": { "message": "目標網址" },
+  "browserClientTaskUpdated": { "message": "更新時間" },
+  "browserClientTaskProgress": { "message": "進度" },
+  "browserClientVerificationHelp": { "message": "請在已授權的同一分頁完成人工驗證。驗證畫面消失後，擴充功能會自動檢查並繼續任務，但不會自動解 CAPTCHA。" },
+  "browserClientVerificationStatus": { "message": "驗證狀態" },
+  "browserClientRecovery_browser_disconnected": { "message": "Browser Client 已中斷連線，背景恢復程序會持續嘗試重新連線。" },
+  "browserClientRecovery_resource_unavailable": { "message": "任務原本授權的分頁資源已失效。請開啟任務的目標網址，再用目前分頁恢復任務。" },
+  "browserClientRecovery_worker_changed": { "message": "任務開始後 Browser Worker 已更換。請開啟任務的目標網址，再明確將任務重新綁定到目前分頁。" },
+  "browserClientRecoverTask": { "message": "用目前分頁恢復任務" },
+  "browserClientRecoveringTask": { "message": "正在恢復任務…" },
+  "browserClientDiscoveryHelp": { "message": "已排入轉接器探索。請到 ComicCrawler WebUI 審查並核准草稿。" },
+  "browserClientOpenVerification": { "message": "聚焦驗證分頁" },
+  "browserClientContinue": { "message": "繼續" },
+  "browserClientContinuing": { "message": "正在繼續…" },
+  "browserClientCancelTask": { "message": "取消" },
+  "browserClientClearTask": { "message": "清除本機任務" },
+  "browserClientErrorCode": { "message": "Browser Client 錯誤：$CODE$", "placeholders": { "code": { "content": "$1" } } },
+  "crawlerTaskState_pending": { "message": "等待中" },
+  "crawlerTaskState_waiting_for_browser_worker": { "message": "等待 Browser Worker" },
+  "crawlerTaskState_running": { "message": "執行中" },
+  "crawlerTaskState_waiting_verification": { "message": "等待人工驗證" },
+  "crawlerTaskState_verification_completed": { "message": "已完成驗證 · 請再次建立任務" },
+  "crawlerTaskState_completed": { "message": "已完成" },
+  "crawlerTaskState_failed": { "message": "失敗" },
+  "crawlerTaskState_cancelled": { "message": "已取消" },
+  "crawlerTaskState_interrupted": { "message": "已中斷" },
+  "crawlerTaskState_discovery_queued": { "message": "已排入探索" },
 
   "quickModeEyebrow": { "message": "快速翻譯" },
   "popupEmptyTitle": { "message": "這裡沒有進行中的翻譯" },
@@ -55,6 +111,7 @@
   "detectingPageImages": { "message": "正在尋找漫畫頁面…" },
   "pageTranslatorTitle": { "message": "翻譯漫畫頁面" },
   "closePageTranslator": { "message": "關閉頁面翻譯" },
+  "cancelPageTranslation": { "message": "取消" },
   "pageImageReviewDescription": { "message": "傳送至設定的後端前，請檢查、排除及重新排序已載入的圖片。" },
   "adapterDetected": { "message": "ComicCrawler 轉接器：$ADAPTER$", "placeholders": { "adapter": { "content": "$1" } } },
   "scanningPageImages": { "message": "正在載入並掃描頁面…" },
@@ -124,8 +181,17 @@
 
   "jobEyebrow": { "message": "翻譯工作" },
   "jobTitle": { "message": "即時進度" },
+  "workspaceTabsLabel": { "message": "翻譯工作區內容" },
+  "workspaceTabJob": { "message": "翻譯工作" },
+  "workspaceTabArtifacts": { "message": "產出檔案" },
+  "workspaceTabEvents": { "message": "事件記錄" },
+  "workspaceTabOcr": { "message": "OCR 檢視" },
+  "workspaceTabRevisions": { "message": "頁面版本" },
   "loadingJobTitle": { "message": "正在重新連線至工作" },
   "loadingJobDescription": { "message": "正在讀取 $ID$ 的權威狀態…", "placeholders": { "id": { "content": "$1" } } },
+  "missingJobTitle": { "message": "後端已不存在這個工作" },
+  "missingJobDescription": { "message": "擴充功能從本機紀錄恢復了工作 $ID$，但目前設定的後端回傳 404。該工作可能已被移除，或目前連線的是不同的後端資料庫。", "placeholders": { "id": { "content": "$1" } } },
+  "discardMissingJob": { "message": "移除失效工作" },
   "jobStageLabel": { "message": "目前階段" },
   "jobTypeLabel": { "message": "工作類型" },
   "jobUpdatedLabel": { "message": "最後更新" },
@@ -147,10 +213,6 @@
   "resumingJob": { "message": "正在繼續…" },
   "retryJob": { "message": "建立重試工作" },
   "retryingJob": { "message": "正在重試…" },
-  "deleteSourceUpload": { "message": "刪除來源上傳" },
-  "deletingUpload": { "message": "正在刪除上傳…" },
-  "confirmDeleteUpload": { "message": "要刪除保留的來源上傳嗎？後續編修與重新匯出可能仍需要這些圖片。" },
-  "sourceUploadDeleted": { "message": "來源上傳已刪除" },
   "newTranslation": { "message": "開始另一個翻譯" },
   "requeueTranslation": { "message": "沿用圖片，更改設定" },
   "requeueingTranslation": { "message": "正在載入預檢…" },
@@ -199,6 +261,15 @@
   "jobEventType_child_job_failed": { "message": "子工作執行失敗" },
   "jobEventType_artifact_created": { "message": "產出檔案已建立" },
   "jobEventType_artifact_persisted": { "message": "產出檔案已保存" },
+  "jobEventType_setup_completed": { "message": "翻譯設定已完成" },
+  "jobEventType_pipeline_progress": { "message": "漫畫頁面翻譯進度" },
+  "jobEventType_pipeline_metrics": { "message": "翻譯管線效能摘要" },
+  "jobEventType_pipeline_completed": { "message": "翻譯管線已完成" },
+  "jobEventType_quality_completed": { "message": "翻譯品質檢查已完成" },
+  "jobEventType_knowledge_completed": { "message": "知識處理已完成" },
+  "jobEventType_export_completed": { "message": "完整章節輸出已完成" },
+  "jobEventType_project_closed": { "message": "Koharu 專案已關閉" },
+  "jobEventType_reference_extraction_completed": { "message": "參考資料抽取已完成" },
   "jobEventType_unknown": { "message": "後端事件：$TYPE$", "placeholders": { "type": { "content": "$1" } } },
   "jobEventMeta_stage": { "message": "階段" },
   "jobEventMeta_status": { "message": "狀態" },
@@ -226,6 +297,22 @@
   "error_versioned_route_required": { "message": "API 網址必須以 /api/v1 結尾。" },
   "error_host_permission_denied": { "message": "未授予主機存取權限，因此沒有儲存後端設定。" },
   "error_settings_not_loaded": { "message": "後端設定尚未載入。" },
+  "error_comicCrawler_browser_credentials_incomplete": { "message": "請同時輸入 ComicCrawler 使用者 ID 與使用者 API 權杖；公開模式則兩欄都留空。" },
+  "error_comicCrawler_browser_not_connected": { "message": "請先連線 ComicCrawler Browser Client。" },
+  "error_comicCrawler_browser_tab_not_registered": { "message": "建立任務前，請重新授權目前分頁。" },
+  "error_comicCrawler_browser_no_verification": { "message": "目前任務沒有人工驗證交接。" },
+  "error_comicCrawler_browser_verification_not_ready": { "message": "已授權分頁仍顯示驗證或封鎖頁面。請在該分頁完成操作；背景檢查會自動繼續。" },
+  "error_comicCrawler_browser_no_task": { "message": "目前沒有 ComicCrawler 任務。" },
+  "error_comicCrawler_browser_task_not_recoverable": { "message": "這個 ComicCrawler 任務目前不屬於可恢復的 Browser target 狀態。" },
+  "error_comicCrawler_browser_recovery_wrong_tab": { "message": "請先在目前分頁開啟任務的目標網址或驗證網址，再恢復任務。" },
+  "error_comicCrawler_browser_rebind_not_found": { "message": "ComicCrawler 已找不到這個任務。請重新整理或清除本機任務記錄。" },
+  "error_comicCrawler_browser_rebind_forbidden": { "message": "目前的 ComicCrawler 使用者並不擁有這個任務或 Browser target。" },
+  "error_comicCrawler_browser_rebind_invalid_state": { "message": "任務已變成不可恢復的狀態。請重新整理狀態後再試。" },
+  "error_comicCrawler_browser_rebind_stale_target": { "message": "任務的 Browser target 在載入後已變更。請重新整理任務後再試。" },
+  "error_comicCrawler_browser_rebind_invalid_target": { "message": "ComicCrawler 拒絕新的 Browser target。請確認 Worker 閒置中，而且目前頁面符合任務。" },
+  "error_comicCrawler_browser_task_not_cancelable": { "message": "ComicCrawler 沒有提供取消此探索記錄的 API。請到 ComicCrawler WebUI 處理，或清除本機記錄。" },
+  "error_comicCrawler_browser_user_gesture_required": { "message": "請開啟擴充功能 popup，並在其中執行這個操作。" },
+  "error_current_tab_inaccessible": { "message": "目前分頁無法存取，或不是 HTTP/HTTPS 頁面。" },
   "error_backend_health_unavailable": { "message": "後端健康狀態未回報就緒。" },
   "error_backend_not_ready": { "message": "後端執行環境尚未就緒。" },
   "error_koharu_not_ready": { "message": "Koharu 尚未執行。請在主機上啟動後再檢查。" },
@@ -233,23 +320,106 @@
   "error_translation_target_incomplete": { "message": "請同時選擇翻譯服務與模型。" },
   "error_crawler_source_unavailable": { "message": "ComicCrawler 圖片來源無法使用。" },
   "error_page_image_fetch_failed": { "message": "無法從頁面讀取其中一張圖片。" },
+  "error_source_page_mapping_incomplete": { "message": "ComicCrawler 無法將先前翻譯完整對應到目前章節頁面，因此未自動套用。" },
+  "error_source_page_changed": { "message": "ComicCrawler 偵測到原始漫畫頁面已更新，因此未自動套用舊翻譯。" },
   "error_artifact_not_image": { "message": "此產出檔案不是圖片，無法套用至頁面。" }
   ,"error_artifact_not_image_or_zip": { "message": "翻譯產出不是圖片或 ZIP 壓縮檔。" }
   ,"error_artifact_zip_invalid": { "message": "無法解壓縮翻譯產出的 ZIP 檔案。" }
   ,"error_artifact_zip_has_no_images": { "message": "翻譯產出的 ZIP 檔案中沒有支援的圖片。" }
   ,"error_artifact_image_count_mismatch": { "message": "翻譯圖片數量與選取的頁面圖片數量不同，因此未執行自動替換。" }
   ,"error_inline_replacement_incomplete": { "message": "無法在頁面上找到所有原圖，已還原任何已完成的部分替換。" }
+  ,"error_inline_restore_failed": { "message": "無法還原頁面原圖，請重新載入頁面後再試。" }
   ,"error_translated_images_contract_invalid": { "message": "後端回傳的翻譯圖片清單格式無效。" }
   ,"error_translated_image_content_invalid": { "message": "後端翻譯圖片端點未回傳圖片。" }
   ,"error_artifact_read_failed": { "message": "無法讀取翻譯圖片產出檔案。" }
   ,"error_comicCrawler_network": { "message": "無法連線至 ComicCrawler；仍可使用一般頁面掃描。" }
   ,"error_comicCrawler_api": { "message": "ComicCrawler 拒絕了要求。請檢查服務與驗證設定。" }
   ,"error_comicCrawler_contract": { "message": "ComicCrawler 傳回不支援的回應。" }
-  ,"error_comicCrawler_unavailable": { "message": "ComicCrawler 的正式章節圖片 API 無法使用，已改用一般頁面掃描。" }
+  ,"error_comicCrawler_unavailable": { "message": "ComicCrawler 的章節圖片 API 無法使用或未及時完成，已改用一般頁面掃描。" }
   ,"error_source_host_permission_required": { "message": "需要圖片來源權限。請開啟擴充功能 popup，點擊「授權圖片來源」，再重新翻譯。" }
   ,"warning_comicCrawler_network": { "message": "無法連線至 ComicCrawler，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_api": { "message": "ComicCrawler 拒絕圖片探索，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler 傳回不支援的回應，已改用一般頁面掃描。" }
-  ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler 尚未安裝章節圖片 API，已改用一般頁面掃描。" }
+  ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler 的章節圖片偵測無法使用或未及時完成，已改用一般頁面掃描。" }
+  ,"warning_comicCrawler_timeout": { "message": "ComicCrawler 章節圖片擷取超過 45 秒，已改用一般頁面掃描。請確認頁面沒有等待驗證後再重試。" }
+  ,"warning_comicCrawler_verification_required": { "message": "ComicCrawler 正在等待網站驗證。請在目前漫畫分頁完成驗證；驗證通過後會自動繼續擷取圖片。" }
+  ,"warning_comicCrawler_browser_target_required": { "message": "ComicCrawler 無法使用目前分頁。請保持漫畫分頁開啟後再試一次；Browser Client 會在背景自動重新連線與註冊。" }
   ,"warning_canvas_snapshot": { "message": "Canvas 頁面會以 PNG 快照匯出；受污染的 canvas 可能無法匯出。" }
+  ,"pageRevisionEyebrow": { "message": "頁面修正" }
+  ,"pageRevisionTitle": { "message": "頁面翻譯版本" }
+  ,"pageRevisionDescription": { "message": "頁面重譯成功後會自動成為目前版本。你可以選取頁面重新翻譯，或選擇舊版本進行管理復原。" }
+  ,"pageRevisionLoading": { "message": "正在載入頁面版本…" }
+  ,"pageRevisionPage": { "message": "第 $1 頁" }
+  ,"pageRevisionVersionLabel": { "message": "翻譯版本" }
+  ,"pageRevisionVersion": { "message": "版本 $1" }
+  ,"pageRevisionActive": { "message": "目前啟用" }
+  ,"pageRevisionPreview": { "message": "預覽" }
+  ,"pageRevisionPreviewAlt": { "message": "第 $1 頁的翻譯預覽" }
+  ,"pageRevisionInheritedTarget": { "message": "沿用翻譯服務與模型" }
+  ,"retranslationInstructionsLabel": { "message": "修正指示（選填）" }
+  ,"retranslationInstructionsPlaceholder": { "message": "例如：角色名稱 Koharu 保留原文。" }
+  ,"retranslationInstructionsHelp": { "message": "新工作會沿用目前的翻譯服務、模型與語言；只有 LLM 翻譯服務支援修正指示。" }
+  ,"retranslateSelectedPages": { "message": "重新翻譯已選取的 $1 頁" }
+  ,"retranslationCreating": { "message": "正在建立重新翻譯工作…" }
+  ,"pageRevisionRestore": { "message": "復原 $1 個所選版本" }
+  ,"pageRevisionRestoring": { "message": "正在復原版本…" }
+  ,"textRegionEyebrow": { "message": "OCR 檢視" }
+  ,"textRegionTitle": { "message": "文字偵測區域" }
+  ,"textRegionDescription": { "message": "檢視並修正此工作保留的偵測框與完整 OCR 原文；不同頁面的修改可一次送出。" }
+  ,"textRegionLoading": { "message": "正在載入文字區域…" }
+  ,"textRegionEmpty": { "message": "此工作沒有偵測到文字區域。" }
+  ,"textRegionPageLabel": { "message": "翻譯頁面" }
+  ,"textRegionPageOption": { "message": "第 $1 頁" }
+  ,"textRegionShowBoxes": { "message": "顯示文字偵測框" }
+  ,"textRegionShowText": { "message": "在圖片上顯示 OCR 文字" }
+  ,"textRegionImageMode": { "message": "預覽圖片" }
+  ,"textRegionOriginalImage": { "message": "原圖" }
+  ,"textRegionTranslatedImage": { "message": "翻譯後" }
+  ,"textRegionZoomControls": { "message": "圖片縮放" }
+  ,"textRegionZoomOut": { "message": "縮小圖片" }
+  ,"textRegionZoomIn": { "message": "放大圖片" }
+  ,"textRegionZoomReset": { "message": "重設為 100%" }
+  ,"popupScrollControls": { "message": "Popup 頁面導覽" }
+  ,"pageScrollControls": { "message": "翻譯工作區導覽" }
+  ,"scrollToTop": { "message": "回到頂端" }
+  ,"scrollToBottom": { "message": "前往底部" }
+  ,"textRegionOriginalImageLoading": { "message": "正在載入原始頁面…" }
+  ,"textRegionOriginalPreviewAlt": { "message": "含文字區域標示的第 $1 頁原始圖片" }
+  ,"textRegionImageLoading": { "message": "正在載入翻譯頁面…" }
+  ,"textRegionPreviewAlt": { "message": "含文字區域標示的第 $1 頁翻譯圖片" }
+  ,"textRegionSelect": { "message": "檢視第 $1 個文字區域" }
+  ,"textRegionListLabel": { "message": "偵測到的文字區域" }
+  ,"textRegionSourceText": { "message": "完整 OCR 原文" }
+  ,"textRegionTranslatedText": { "message": "翻譯文字" }
+  ,"textRegionConfidence": { "message": "OCR 信心值" }
+  ,"textRegionNoSourceText": { "message": "沒有 OCR 文字" }
+  ,"textRegionNoTranslatedText": { "message": "沒有翻譯文字" }
+  ,"error_text_region_snapshot_unavailable": { "message": "這個較舊的工作沒有保留文字區域快照。" }
+  ,"error_text_region_coordinate_space_unavailable": { "message": "後端無法為這份文字區域快照提供可靠的圖片尺寸。" }
+  ,"rootJobIdLabel": { "message": "根工作 ID" }
+  ,"retranslationPageCountLabel": { "message": "本次修正頁數" }
+  ,"textRegionChangedCount": { "message": "已修改 $1 個" }
+  ,"textRegionChanged": { "message": "已修改的文字區域" }
+  ,"textRegionChangedMark": { "message": "已修改" }
+  ,"textRegionGeometry": { "message": "文字偵測框座標" }
+  ,"textRegionGeometry_x": { "message": "X" }
+  ,"textRegionGeometry_y": { "message": "Y" }
+  ,"textRegionGeometry_width": { "message": "寬度" }
+  ,"textRegionGeometry_height": { "message": "高度" }
+  ,"textRegionGeometry_rotation": { "message": "旋轉角度（°）" }
+  ,"textRegionGeometryHelp": { "message": "拖曳所選文字框可移動位置，拖曳綠色控制點可調整大小；座標使用原圖像素，範圍為 $1 × $2。" }
+  ,"textRegionResizeHandle": { "message": "調整所選文字框大小" }
+  ,"textRegionResetRegion": { "message": "還原此文字框" }
+  ,"textRegionResetAll": { "message": "清除全部修改" }
+  ,"textRegionInstructionsLabel": { "message": "翻譯修正指示（選填）" }
+  ,"textRegionInstructionsPlaceholder": { "message": "例如：將 Intergalactic Empire 視為一個完整詞彙。" }
+  ,"textRegionCorrectionHelp": { "message": "修正工作會沿用目前的翻譯服務、模型與語言；只有相容的翻譯服務支援額外指示。" }
+  ,"textRegionBatchSummary": { "message": "將送出 $2 頁中的 $1 個文字區域。" }
+  ,"textRegionSubmitCorrections": { "message": "修正並重新翻譯 $1 個文字區域" }
+  ,"textRegionCorrectionCreating": { "message": "正在建立文字修正工作…" }
+  ,"textRegionReload": { "message": "重新載入最新文字框" }
+  ,"error_stale_region_set_revision": { "message": "這些文字框在載入後已被更新。請重新載入最新文字框，再次確認修正內容。" }
+  ,"error_text_region_source_text_required": { "message": "修正後的 OCR 原文不可為空白。" }
+  ,"error_text_region_geometry_invalid": { "message": "所有座標都必須是有效數字，且寬度與高度必須大於零。" }
+  ,"error_text_region_geometry_out_of_bounds": { "message": "文字偵測框必須完整位於原始圖片範圍內。" }
 }
