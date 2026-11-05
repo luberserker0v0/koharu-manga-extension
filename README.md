@@ -17,8 +17,12 @@ A WXT browser extension for the Manga Translation Backend. It talks only to the 
 - Configurable versioned API URL and optional Bearer token
 - English and Traditional Chinese extension i18n
 - Per-site floating page translation with lazy-image scanning and review, covering `<img>`, `<picture>` sources, shadow-DOM images, video posters, CSS background images, and canvas snapshots; PDFs and browser-internal pages are unsupported
+- Persistent chapter background jobs for page retranslations, OCR corrections, and AI OCR review; queued backend work survives popup/browser closure and reconciles when the chapter is reopened
+- A live-Job whole-chapter action that AI-corrects every untouched OCR region, preserves manual edits, adopts successful suggestions, and submits one multi-page correction/retranslation Job
+- An optional persisted page-number overlay that maps stable chapter/source identities onto comic images without wrapping or changing the reader's DOM layout
 - Optional approved ComicCrawler adapters with safe generic DOM fallback
-- ComicCrawler Browser Client SDK v0.2.0 in `existing-tab` mode, prepared automatically in the background for the active tab
+- ComicCrawler Browser Client protocol v4 in `existing-tab` mode, using a revision-verified local SDK artifact
+- Passive persisted ComicCrawler manifest lookup and lazy page-ID resolution without Browser Client scrolling
 - Ordered multi-image inline replacement through the backend `translated-images` API, with original-image restoration
 - Selective page retranslation with inherited job settings, correction instructions, immutable page-version history, preview, activation, and rollback
 
@@ -40,15 +44,15 @@ If the backend requires authentication, configure its optional Bearer token in t
 
 ### ComicCrawler (optional)
 
-Run [ComicCrawler](https://github.com/luberserker0v0/comic-crawler) to use approved site adapters, canonical chapter recognition, and ordered chapter-image discovery. The default service URL is:
+Run a revision-verified local build of [ComicCrawler](https://github.com/luberserker0v0/comic-crawler) to use approved site adapters, canonical chapter recognition, ordered chapter-image discovery, persisted passive manifests, and incremental preparation for long or slow readers. The default service URL is:
 
 ```text
 http://127.0.0.1:4100
 ```
 
-Enable ComicCrawler in the extension settings and configure Basic-auth credentials when required. The integration uses ComicCrawler's REST API, including `POST /api/adapters/chapter-images`; it never reads crawler output directories or executes adapter drafts. When ComicCrawler is disabled, unavailable, or has no matching adapter, the extension falls back to generic page image detection.
+Enable ComicCrawler in the extension settings and configure Basic-auth credentials when required. The integration uses ComicCrawler's REST API, including `POST /api/adapters/chapter-images` and the passive `/api/chapter-image-manifests/*` family; it never reads crawler output directories or executes adapter drafts. When ComicCrawler is disabled, unavailable, or has no matching adapter, the extension falls back to generic page image detection.
 
-To let ComicCrawler operate the active chapter tab, configure the Browser Client user ID/token when the Server uses token mode. Opening the extension or starting translation automatically enrolls the Browser Client when needed, connects it, and registers that active tab; these transport controls are not shown in the normal UI. The extension uses ComicCrawler Browser Client SDK v0.2.0 in `existing-tab` mode and never sends the native browser tab ID to the Server. Chrome/Edge 116 or newer is required for reliable MV3 WebSocket lifetime behavior. After the user completes a challenge, the background coordinator checks the same tab and resumes the same task automatically; it never solves CAPTCHA.
+To let ComicCrawler operate the active chapter tab, configure the Browser Client user ID/token when the Server uses token mode. Opening the extension or starting translation automatically enrolls the Browser Client when needed, connects it, and registers that active tab; these transport controls are not shown in the normal UI. Development uses the locally generated Browser Client SDK after verifying its source revision against the running container. The extension uses protocol v4 in `existing-tab` mode and never sends the native browser tab ID to the Server. Reader preparation is split into bounded `start`, `step`, and `finish` commands, so continued page discovery is not limited by one fixed Browser command timeout. Chrome/Edge 116 or newer is required for reliable MV3 WebSocket lifetime behavior. After the user completes a challenge, the background coordinator checks the same tab and resumes the same task automatically; it never solves CAPTCHA.
 
 For extension development, install Node.js and npm. Chrome or Edge is required to load and test the MV3 build.
 
@@ -92,5 +96,7 @@ The workflow can also be started from **Actions → Release extension → Run wo
 - `entrypoints`: thin WXT startup and composition files
 
 See [docs/BACKEND_API.md](docs/BACKEND_API.md), [docs/COMIC_CRAWLER_API.md](docs/COMIC_CRAWLER_API.md), [docs/COMIC_CRAWLER_BROWSER_CLIENT.md](docs/COMIC_CRAWLER_BROWSER_CLIENT.md), [docs/COMIC_CRAWLER_V0_2_INTEGRATION_REPORT.md](docs/COMIC_CRAWLER_V0_2_INTEGRATION_REPORT.md), and [docs/IMMERSIVE_TRANSLATE_ANALYSIS.md](docs/IMMERSIVE_TRANSLATE_ANALYSIS.md) for the backend boundary, ComicCrawler contracts, integration verification, and page-translation design comparison.
+
+For Microsoft Edge on Android, LAN backend setup, responsive UI behavior, and the physical-device test matrix, see [docs/MOBILE_EDGE.md](docs/MOBILE_EDGE.md).
 
 Source uploads are intentionally not deleted when a translation finishes because post-edit and re-export workflows may still require them.

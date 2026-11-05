@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiSettingsForUntrustedContext, loadApiSettings } from '../lib/storage/settings';
+import { apiSettingsForUntrustedContext, loadApiSettings, savePageNumberPreference, writePageNumberPreference } from '../lib/storage/settings';
 
 describe('API settings loading', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -55,6 +55,7 @@ describe('API settings loading', () => {
     expect(apiSettingsForUntrustedContext({
       baseUrl: 'http://127.0.0.1:4001/api/v1',
       token: 'backend-secret',
+      showPageNumbers: false,
       comicCrawler: {
         enabled: true,
         autoApplyPreviousTranslation: false,
@@ -68,5 +69,44 @@ describe('API settings loading', () => {
       token: '',
       comicCrawler: { username: '', password: '', userId: '', userToken: '' },
     });
+  });
+
+  it('updates only the page-number preference through the background when content storage is protected', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      baseUrl: 'http://127.0.0.1:4001/api/v1',
+      token: '',
+      showPageNumbers: true,
+      comicCrawler: {
+        enabled: true, autoApplyPreviousTranslation: true, baseUrl: 'http://127.0.0.1:4100',
+        username: '', password: '', userId: '', userToken: '',
+      },
+    });
+    vi.stubGlobal('browser', {
+      storage: { local: { get: vi.fn().mockRejectedValue(new Error('Access denied')) } },
+      runtime: { sendMessage },
+    });
+
+    await expect(savePageNumberPreference(true)).resolves.toMatchObject({ showPageNumbers: true });
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'SET_SHOW_PAGE_NUMBERS', showPageNumbers: true });
+  });
+
+  it('stores the page-number toggle separately from backend settings', async () => {
+    const set = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('browser', {
+      storage: { local: {
+        get: vi.fn().mockResolvedValue({
+          backendSettings: {
+            baseUrl: 'http://127.0.0.1:4001/api/v1', token: 'secret',
+            comicCrawler: { enabled: false },
+          },
+          uiPreferences: { showPageNumbers: false },
+        }),
+        set,
+      } },
+    });
+
+    await writePageNumberPreference(true);
+
+    expect(set).toHaveBeenCalledWith({ uiPreferences: { showPageNumbers: true } });
   });
 });

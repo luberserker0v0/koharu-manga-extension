@@ -22,7 +22,7 @@ describe('BackendClient', () => {
   it('uses versioned routes and Bearer authentication', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       backend: { status: 'ready' },
-      koharu: { status: 'running' },
+      mangaProcessor: { status: 'running', providerId: 'koharu', providerName: 'Koharu' },
       agent: { status: 'unconfigured' },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     const client = new BackendClient({ baseUrl: 'http://127.0.0.1:4001/api/v1', token: 'secret' });
@@ -41,10 +41,10 @@ describe('BackendClient', () => {
       deploymentMode: 'docker',
       services: {
         backend: { required: true, ready: true, status: 'ready' },
-        koharu: { required: true, ready: true, status: 'running', mode: 'external' },
+        mangaProcessor: { required: true, ready: true, status: 'running', mode: 'external', providerId: 'koharu', providerName: 'Koharu' },
         ao: { required: false, ready: false, status: 'unavailable' },
       },
-      capabilities: { koharuJobs: true, aoJobs: false },
+      capabilities: { mangaProcessingJobs: true, aoJobs: false },
       blockers: [],
       warnings: [{ service: 'ao', code: 'ao_unavailable', message: 'AO is unavailable.' }],
     };
@@ -66,11 +66,11 @@ describe('BackendClient', () => {
       deploymentMode: 'docker',
       services: {
         backend: { required: true, ready: true, status: 'ready' },
-        koharu: { required: true, ready: false, status: 'unavailable', mode: 'external' },
+        mangaProcessor: { required: true, ready: false, status: 'unavailable', mode: 'external', providerId: 'koharu', providerName: 'Koharu' },
         ao: { required: false, ready: true, status: 'ready' },
       },
-      capabilities: { koharuJobs: false, aoJobs: true },
-      blockers: [{ service: 'koharu', code: 'koharu_unavailable', message: 'Koharu is unavailable.' }],
+      capabilities: { mangaProcessingJobs: false, aoJobs: true },
+      blockers: [{ service: 'manga_processor', code: 'manga_processor_unavailable', message: 'Manga processor is unavailable.' }],
       warnings: [],
     };
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(readiness), {
@@ -87,7 +87,7 @@ describe('BackendClient', () => {
       status: 200,
       headers: { 'content-type': 'application/json' },
       encoding: 'text',
-      body: JSON.stringify({ backend: { status: 'ready' }, koharu: { status: 'running' }, agent: { status: 'ready' } }),
+      body: JSON.stringify({ backend: { status: 'ready' }, mangaProcessor: { status: 'running' }, agent: { status: 'ready' } }),
     });
     vi.stubGlobal('browser', { runtime: { sendMessage } });
     const client = new BackendClient(
@@ -125,7 +125,7 @@ describe('BackendClient', () => {
     }));
   });
 
-  it('reads the sanitized Koharu translation-provider catalog', async () => {
+  it('reads the sanitized manga-processor translation-provider catalog', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       providers: [{ providerId: 'deepl', name: 'DeepL', kind: 'machine_translation', status: 'ready', hasCredential: true, models: [] }],
       defaultTarget: { providerId: 'deepl', modelId: 'mt' },
@@ -133,7 +133,7 @@ describe('BackendClient', () => {
     const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: 'secret' });
 
     await expect(client.getTranslationProviders()).resolves.toMatchObject({ defaultTarget: { providerId: 'deepl', modelId: 'mt' } });
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/runtime/koharu/translation-providers');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/runtime/manga-processor/translation-providers');
   });
 
   it('serializes JSON requests centrally', async () => {
@@ -302,7 +302,7 @@ describe('BackendClient', () => {
       pages: [{
         sourceImageId: 'source/1',
         baseRegionSetRevisionId: 'region-set-1',
-        regions: [{ regionId: 'region-1', sourceText: 'intergalactic' }],
+        operations: [{ type: 'update' as const, regionId: 'region-1', sourceText: 'intergalactic' }],
       }],
     };
 
@@ -315,6 +315,41 @@ describe('BackendClient', () => {
       method: 'POST',
       body: JSON.stringify(correction),
     });
+  });
+
+  it('reviews one OCR page and applies the inspected full-page result', async () => {
+    const review = { count: 1, regions: [{ box: [10, 20, 30, 40] as [number, number, number, number], text: 'fixed' }] };
+    const queued = { id: 'job-ai-correction', status: 'queued' };
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(review), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(queued), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+    const identity = { sourceImageId: 'source/1', baseRegionSetRevisionId: 'region-set-1' };
+
+    await expect(client.reviewTextRegions('job/parent', identity)).resolves.toEqual(review);
+    await expect(client.applyTextRegionReview('job/parent', { ...identity, ...review })).resolves.toEqual(queued);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Fparent/text-region-reviews');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://localhost:4001/api/v1/jobs/job%2Fparent/text-region-reviews/apply');
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ ...identity, ...review }) });
+  });
+
+  it('creates an asynchronous OCR text-review Job without coordinates', async () => {
+    const queued = { id: 'ocr-review-1', type: 'ocr_text_review', status: 'queued' };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(queued), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const client = new BackendClient({ baseUrl: 'http://localhost:4001/api/v1', token: '' });
+    const payload = {
+      uploadId: 'upload-1',
+      sourceLanguages: ['en', 'ja'],
+      items: [{ clientItemId: 'region-1', fileName: 'ocr_001.png', ocrText: 'inter galactic' }],
+    };
+
+    await expect(client.createOcrTextReviewJob(payload)).resolves.toEqual(queued);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:4001/api/v1/jobs/ocr-text-review');
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify(payload) });
   });
 
   it('reads and atomically activates page revisions', async () => {

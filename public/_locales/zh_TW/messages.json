@@ -6,7 +6,7 @@
   "loadingExtension": { "message": "正在開啟工作區…" },
   "openSettings": { "message": "開啟後端設定" },
   "closeSettings": { "message": "關閉設定" },
-  "backendReady": { "message": "後端與 Koharu 已就緒" },
+  "backendReady": { "message": "後端與漫畫處理器已就緒" },
   "backendNotChecked": { "message": "尚未檢查連線" },
   "checkingBackend": { "message": "正在檢查後端…" },
   "checkConnection": { "message": "檢查" },
@@ -31,7 +31,7 @@
   "settingsTitle": { "message": "後端設定" },
   "apiBaseUrlLabel": { "message": "版本化 API 基底網址" },
   "apiBaseUrlPlaceholder": { "message": "http://127.0.0.1:4001/api/v1" },
-  "apiBaseUrlHelp": { "message": "網址必須以 /api/v1 結尾。儲存時可能會要求主機權限。" },
+  "apiBaseUrlHelp": { "message": "網址必須以 /api/v1 結尾。儲存時可能會要求主機權限。手機上的 127.0.0.1 是手機本身，請使用後端主機在可信任區域網路或私人網路中的位址。" },
   "bearerTokenLabel": { "message": "Bearer 權杖（選填）" },
   "bearerTokenPlaceholder": { "message": "未啟用驗證時請留空" },
   "bearerTokenHelp": { "message": "僅儲存在擴充功能本機儲存區，網頁腳本無法存取。" },
@@ -40,6 +40,7 @@
   "comicCrawlerAutoApplyPreviousLabel": { "message": "自動套用 ComicCrawler 章節的先前翻譯" },
   "comicCrawlerAutoApplyPreviousHelp": { "message": "頁面被識別為已翻譯章節時，不開啟工作區，直接在工作成功且圖片數量吻合時套用翻譯。" },
   "comicCrawlerUrlLabel": { "message": "ComicCrawler 服務網址" },
+  "comicCrawlerUrlHelp": { "message": "手機上請使用 ComicCrawler 主機在可信任區域網路或私人網路中的位址，不要使用 127.0.0.1。" },
   "comicCrawlerUsernameLabel": { "message": "Basic 驗證使用者名稱" },
   "comicCrawlerPasswordLabel": { "message": "Basic 驗證密碼" },
   "comicCrawlerAuthHelp": { "message": "憑證只儲存在擴充功能本機儲存區，不會顯示給網頁。" },
@@ -158,6 +159,12 @@
   "sourceLanguageLabel": { "message": "來源語言（選填）" },
   "sourceLanguagePlaceholder": { "message": "ja" },
   "sourceLanguageAutomatic": { "message": "自動判斷／未指定" },
+  "sourceLanguageAdd": { "message": "新增來源語言" },
+  "sourceLanguagePrimary": { "message": "主要" },
+  "sourceLanguageOrderHelp": { "message": "第一個語言是主要語言，後續語言依序作為較低優先的 OCR 與翻譯判斷資訊。" },
+  "sourceLanguageMoveUp": { "message": "將 $1 往上移" },
+  "sourceLanguageMoveDown": { "message": "將 $1 往下移" },
+  "sourceLanguageRemove": { "message": "移除 $1" },
   "exportFormatLabel": { "message": "匯出格式" },
   "exportRendered": { "message": "已渲染圖片" },
   "exportPsd": { "message": "Photoshop 文件" },
@@ -205,6 +212,10 @@
   "jobOutcomeDetail": { "message": "結果：$OUTCOME$", "placeholders": { "outcome": { "content": "$1" } } },
   "failedChildTitle": { "message": "子工作 $ID$ 失敗", "placeholders": { "id": { "content": "$1" } } },
   "diagnosticsTitle": { "message": "診斷資訊" },
+  "ocrLanguageResolutionTitle": { "message": "OCR 語言選擇" },
+  "ocrLanguageEngineDetail": { "message": "OCR 引擎：$1" },
+  "ocrLanguageSourceDetail": { "message": "來源語言：$1" },
+  "ocrLanguageHintsNotApplied": { "message": "來源語言已用於選擇 OCR 引擎，但目前的漫畫處理器尚未收到明確的語言提示。" },
   "cancelJob": { "message": "取消工作" },
   "requestingCancellation": { "message": "正在要求取消…" },
   "recommendedActionLabel": { "message": "建議處理方式" },
@@ -241,6 +252,14 @@
   "eventsTitle": { "message": "事件記錄" },
   "eventsEmpty": { "message": "正在等待第一個已保存事件。" },
   "eventsNewestFirst": { "message": "最新事件顯示在最上方。" },
+  "showMoreEvents": { "message": "再顯示 $COUNT$ 筆", "placeholders": { "count": { "content": "$1" } } },
+  "preparingPageApplication": { "message": "正在準備頁面圖片對應…" },
+  "applyingPageImages": { "message": "正在套用翻譯圖片 $CURRENT$ / $TOTAL$", "placeholders": { "current": { "content": "$1" }, "total": { "content": "$2" } } },
+  "pageApplicationCompleted": { "message": "翻譯圖片已套用" },
+  "pageApplicationFailed": { "message": "無法套用翻譯圖片，請重新開啟工作區查看詳細資訊。" },
+  "error_source_page_manifest_unavailable": { "message": "找不到已保存的章節圖片 manifest；套用既有翻譯時不會自動捲動頁面。" },
+  "error_source_page_manifest_changed": { "message": "ComicCrawler 保存的章節圖片 manifest 在這次翻譯建立後已變更，因此不會自動套用舊翻譯。" },
+  "error_inline_application_in_progress": { "message": "另一個頁面套用工作仍在執行，請先完成或還原後再套用不同版本。" },
   "jobEventType_job_created": { "message": "工作已建立" },
   "jobEventType_job_queued": { "message": "工作已排入佇列" },
   "jobEventType_job_started": { "message": "工作開始執行" },
@@ -315,7 +334,7 @@
   "error_current_tab_inaccessible": { "message": "目前分頁無法存取，或不是 HTTP/HTTPS 頁面。" },
   "error_backend_health_unavailable": { "message": "後端健康狀態未回報就緒。" },
   "error_backend_not_ready": { "message": "後端執行環境尚未就緒。" },
-  "error_koharu_not_ready": { "message": "Koharu 尚未執行。請在主機上啟動後再檢查。" },
+  "error_manga_processor_not_ready": { "message": "設定的漫畫處理器尚未執行。請在主機上啟動後再檢查。" },
   "error_no_images_selected": { "message": "請至少選擇一張來源圖片。" },
   "error_translation_target_incomplete": { "message": "請同時選擇翻譯服務與模型。" },
   "error_crawler_source_unavailable": { "message": "ComicCrawler 圖片來源無法使用。" },
@@ -336,14 +355,25 @@
   ,"error_comicCrawler_api": { "message": "ComicCrawler 拒絕了要求。請檢查服務與驗證設定。" }
   ,"error_comicCrawler_contract": { "message": "ComicCrawler 傳回不支援的回應。" }
   ,"error_comicCrawler_unavailable": { "message": "ComicCrawler 的章節圖片 API 無法使用或未及時完成，已改用一般頁面掃描。" }
-  ,"error_source_host_permission_required": { "message": "需要圖片來源權限。請開啟擴充功能 popup，點擊「授權圖片來源」，再重新翻譯。" }
+  ,"error_source_host_permission_required": { "message": "需要圖片來源權限。請授權後繼續目前的翻譯流程。" }
+  ,"sourceAccessWaiting": { "message": "需要授權 $1 個圖片來源。授權後會沿用目前的圖片清單與順序，不會重新執行 ComicCrawler。" }
+  ,"authorizeSourceAccessAndContinue": { "message": "授權圖片來源並繼續" }
+  ,"openingSourceAccess": { "message": "正在開啟授權介面…" }
+  ,"error_source_access_open_failed": { "message": "無法開啟圖片來源授權介面。請開啟擴充功能 popup 完成授權；目前的掃描結果會保留。" }
+  ,"error_source_access_request_expired": { "message": "圖片來源授權要求已過期，請重新確認目前的圖片清單。" }
+  ,"error_source_access_page_mismatch": { "message": "漫畫分頁已變更，無法把這次授權套用到原本的翻譯流程。" }
+  ,"error_source_access_notification_failed": { "message": "授權已完成，但原漫畫分頁目前無法接收通知。返回原分頁即可繼續，不需要重新掃描。" }
   ,"warning_comicCrawler_network": { "message": "無法連線至 ComicCrawler，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_api": { "message": "ComicCrawler 拒絕圖片探索，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler 傳回不支援的回應，已改用一般頁面掃描。" }
   ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler 的章節圖片偵測無法使用或未及時完成，已改用一般頁面掃描。" }
-  ,"warning_comicCrawler_timeout": { "message": "ComicCrawler 章節圖片擷取超過 45 秒，已改用一般頁面掃描。請確認頁面沒有等待驗證後再重試。" }
+  ,"warning_comicCrawler_timeout": { "message": "ComicCrawler 轉接器快速檢查逾時，已改用一般頁面掃描。" }
+  ,"warning_comicCrawler_browser_timeout": { "message": "ComicCrawler 的分段瀏覽器操作未能在時限內完成或持續推進，已改用一般頁面掃描。請確認漫畫分頁仍開啟且可操作後再試。" }
   ,"warning_comicCrawler_verification_required": { "message": "ComicCrawler 正在等待網站驗證。請在目前漫畫分頁完成驗證；驗證通過後會自動繼續擷取圖片。" }
   ,"warning_comicCrawler_browser_target_required": { "message": "ComicCrawler 無法使用目前分頁。請保持漫畫分頁開啟後再試一次；Browser Client 會在背景自動重新連線與註冊。" }
+  ,"warning_comicCrawler_browser_protocol": { "message": "Extension 與 ComicCrawler 的 Browser Client protocol 版本不相容。請更新兩者後再試。" }
+  ,"warning_comicCrawler_browser_enrollment": { "message": "ComicCrawler Browser Client 的舊連線身分已失效。Extension 會自動重新註冊，請再試一次。" }
+  ,"warning_comicCrawler_browser_connection": { "message": "Extension 無法建立 ComicCrawler Browser Client WebSocket 連線。請確認 ComicCrawler 網址與網路後再試。" }
   ,"warning_canvas_snapshot": { "message": "Canvas 頁面會以 PNG 快照匯出；受污染的 canvas 可能無法匯出。" }
   ,"pageRevisionEyebrow": { "message": "頁面修正" }
   ,"pageRevisionTitle": { "message": "頁面翻譯版本" }
@@ -372,6 +402,9 @@
   ,"textRegionPageOption": { "message": "第 $1 頁" }
   ,"textRegionShowBoxes": { "message": "顯示文字偵測框" }
   ,"textRegionShowText": { "message": "在圖片上顯示 OCR 文字" }
+  ,"textRegionAdd": { "message": "新增 OCR 框" }
+  ,"textRegionCancelAdd": { "message": "取消新增文字框" }
+  ,"textRegionAddHelp": { "message": "請在預覽圖片上拖曳，框出漏掉的 OCR 文字區域。" }
   ,"textRegionImageMode": { "message": "預覽圖片" }
   ,"textRegionOriginalImage": { "message": "原圖" }
   ,"textRegionTranslatedImage": { "message": "翻譯後" }
@@ -388,6 +421,7 @@
   ,"textRegionImageLoading": { "message": "正在載入翻譯頁面…" }
   ,"textRegionPreviewAlt": { "message": "含文字區域標示的第 $1 頁翻譯圖片" }
   ,"textRegionSelect": { "message": "檢視第 $1 個文字區域" }
+  ,"textRegionSelectCreated": { "message": "檢視新加入的第 $1 個文字區域" }
   ,"textRegionListLabel": { "message": "偵測到的文字區域" }
   ,"textRegionSourceText": { "message": "完整 OCR 原文" }
   ,"textRegionTranslatedText": { "message": "翻譯文字" }
@@ -398,9 +432,30 @@
   ,"error_text_region_coordinate_space_unavailable": { "message": "後端無法為這份文字區域快照提供可靠的圖片尺寸。" }
   ,"rootJobIdLabel": { "message": "根工作 ID" }
   ,"retranslationPageCountLabel": { "message": "本次修正頁數" }
+  ,"retranslationPagesLabel": { "message": "本次修正頁面" }
+  ,"workspaceTabBackground": { "message": "背景工作" }
+  ,"backgroundJobsEyebrow": { "message": "章節工作佇列" }
+  ,"backgroundJobsTitle": { "message": "背景工作" }
+  ,"backgroundJobsDescription": { "message": "關閉瀏覽器後，已排入後端的工作仍會繼續；重新開啟時會自動對帳。" }
+  ,"backgroundJobsEmpty": { "message": "目前沒有背景工作。" }
+  ,"backgroundJobKind_selective_retranslation": { "message": "頁面重新翻譯" }
+  ,"backgroundJobKind_text_region_correction": { "message": "OCR 修正並重新翻譯" }
+  ,"backgroundJobKind_ocr_text_review": { "message": "AI OCR 建議" }
+  ,"backgroundJobPages": { "message": "頁面：$1" }
+  ,"backgroundJobRemove": { "message": "從清單移除" }
+  ,"backgroundJobPageLocked": { "message": "處理中" }
+  ,"backgroundJobPageLockedDescription": { "message": "這一頁已有修正工作正在排隊或執行；完成並載入最新版本後才能再次修改。" }
   ,"textRegionChangedCount": { "message": "已修改 $1 個" }
   ,"textRegionChanged": { "message": "已修改的文字區域" }
   ,"textRegionChangedMark": { "message": "已修改" }
+  ,"textRegionExisting": { "message": "既有 OCR 文字框" }
+  ,"textRegionNew": { "message": "新增的 OCR 文字框" }
+  ,"textRegionNewMark": { "message": "新增" }
+  ,"textRegionDeleted": { "message": "已標記刪除" }
+  ,"textRegionDeletedMark": { "message": "刪除" }
+  ,"textRegionDelete": { "message": "刪除文字框" }
+  ,"textRegionRestoreDeleted": { "message": "復原文字框" }
+  ,"textRegionCancelCreated": { "message": "移除新增文字框" }
   ,"textRegionGeometry": { "message": "文字偵測框座標" }
   ,"textRegionGeometry_x": { "message": "X" }
   ,"textRegionGeometry_y": { "message": "Y" }
@@ -411,15 +466,77 @@
   ,"textRegionResizeHandle": { "message": "調整所選文字框大小" }
   ,"textRegionResetRegion": { "message": "還原此文字框" }
   ,"textRegionResetAll": { "message": "清除全部修改" }
-  ,"textRegionInstructionsLabel": { "message": "翻譯修正指示（選填）" }
-  ,"textRegionInstructionsPlaceholder": { "message": "例如：將 Intergalactic Empire 視為一個完整詞彙。" }
-  ,"textRegionCorrectionHelp": { "message": "修正工作會沿用目前的翻譯服務、模型與語言；只有相容的翻譯服務支援額外指示。" }
-  ,"textRegionBatchSummary": { "message": "將送出 $2 頁中的 $1 個文字區域。" }
-  ,"textRegionSubmitCorrections": { "message": "修正並重新翻譯 $1 個文字區域" }
+  ,"textRegionInstructionsLabel": { "message": "重新翻譯提示（選填）" }
+  ,"textRegionInstructionsPlaceholder": { "message": "例如：角色名 Liam 保留英文；語氣使用正式用語。" }
+  ,"textRegionCorrectionHelp": { "message": "此提示只會交給最後的翻譯模型，不影響 OCR 辨識、AI 校正或文字框。沒有特定術語或語氣要求時請留空。" }
+  ,"textRegionBatchSummary": { "message": "將送出 $2 頁中的 $1 項操作。" }
+  ,"textRegionSubmitCorrections": { "message": "套用並重新翻譯 $1 項操作" }
   ,"textRegionCorrectionCreating": { "message": "正在建立文字修正工作…" }
   ,"textRegionReload": { "message": "重新載入最新文字框" }
+  ,"textRegionAiReviewStart": { "message": "請 AI 語意校正此頁 OCR 文字" }
+  ,"textRegionAiReviewRunning": { "message": "AI 正在辨識並語意校正 OCR 文字…" }
+  ,"textRegionAiReviewStopWaiting": { "message": "停止等待" }
+  ,"textRegionAiReviewCancel": { "message": "取消 AI OCR 檢查" }
+  ,"textRegionAiReviewCanceling": { "message": "正在取消 AI OCR 檢查…" }
+  ,"textRegionAiReviewFailureTokenLimit": { "message": "這一欄校正失敗：模型在產生答案前耗盡輸出額度，以下內容只是原 OCR，並非 AI 建議。" }
+  ,"textRegionAiReviewFailureGeneric": { "message": "這一欄校正失敗，以下內容只是原 OCR，並非 AI 建議。" }
+  ,"textRegionAiReviewPhase_preparing": { "message": "正在準備 $2 個 OCR 裁切圖…" }
+  ,"textRegionAiReviewPhase_uploading": { "message": "正在上傳 OCR 裁切圖：$3%" }
+  ,"textRegionAiReviewPhase_queued": { "message": "OCR 檢查已排入佇列，正在等待後端…" }
+  ,"textRegionAiReviewPhase_running": { "message": "已校正 $1 / $2 個 OCR 區域（$3%）。" }
+  ,"textRegionAiReviewOriginalUnavailable": { "message": "目前分頁無法提供原圖，因此 AI OCR 檢查無法建立文字區域裁切圖。" }
+  ,"textRegionAiReviewPartialFailure": { "message": "AI 檢查有 $1 / $2 個 OCR 區域失敗，這些區域已保留原本的 OCR 文字；詳細原因請查看 OCR 檢查工作事件。" }
+  ,"textRegionAiReviewTitle": { "message": "AI OCR 修正建議" }
+  ,"textRegionAiReviewDescription": { "message": "視覺模型會辨識既有的 $1 個 OCR 框並提出文字建議。採納建議只會填入主要 OCR 編輯器，不會立即開始翻譯。" }
+  ,"textRegionAiReviewRegion": { "message": "OCR 框 $1" }
+  ,"textRegionAiReviewOriginal": { "message": "目前 OCR 文字" }
+  ,"textRegionAiReviewSuggested": { "message": "建議 OCR 文字" }
+  ,"textRegionAiReviewDiscard": { "message": "捨棄建議" }
+  ,"textRegionAiReviewApply": { "message": "採納建議並填入 OCR 文字框" }
+  ,"textRegionAiReviewApplying": { "message": "正在建立 AI OCR 修正工作…" }
+  ,"textRegionAiReviewNeedsBoxes": { "message": "此頁沒有 OCR 框。請先手動新增文字框，AI 才能依框校正文字。" }
+  ,"textRegionAiReviewManualConflict": { "message": "AI 會檢查目前的文字框草稿（包含新增、移動與縮放的框）；採納建議時只會填入 OCR 文字，框的位置與大小不會改變。" }
   ,"error_stale_region_set_revision": { "message": "這些文字框在載入後已被更新。請重新載入最新文字框，再次確認修正內容。" }
-  ,"error_text_region_source_text_required": { "message": "修正後的 OCR 原文不可為空白。" }
+  ,"error_text_region_source_text_required": { "message": "新增或修正後的 OCR 原文不可為空白。" }
   ,"error_text_region_geometry_invalid": { "message": "所有座標都必須是有效數字，且寬度與高度必須大於零。" }
   ,"error_text_region_geometry_out_of_bounds": { "message": "文字偵測框必須完整位於原始圖片範圍內。" }
+  ,"error_ocr_review_original_image_unavailable": { "message": "無法取得 AI OCR 檢查所需的原圖。" }
+  ,"error_ocr_text_review_result_invalid": { "message": "OCR 檢查工作回傳了無效結果。" }
+  ,"error_ocr_text_review_all_items_failed": { "message": "視覺模型未能修正任何 OCR 區域；請查看工作事件中的逐區域錯誤。" }
+  ,"error_ocr_review_canvas_unavailable": { "message": "此瀏覽器無法建立 OCR 圖片裁切。" }
+  ,"error_ocr_review_crop_encoding_failed": { "message": "無法編碼 OCR 圖片裁切。" }
+  ,"chapterOcrBatchEyebrow": { "message": "翻譯品質改善" }
+  ,"chapterOcrBatchTitle": { "message": "整章 AI OCR 校正" }
+  ,"chapterOcrBatchDescription": { "message": "依序校正所有含 OCR 的頁面，自動採納成功建議，最後建立一個批量重新翻譯工作。手動修改的文字不會被覆蓋。" }
+  ,"chapterOcrBatchDetected": { "message": "OCR 目標頁面：$1 / $2；共偵測到 $3 個文字區域。" }
+  ,"chapterOcrBatchOriginalUnavailable": { "message": "目前分頁無法提供原圖，因此不能執行整章 AI OCR 校正。" }
+  ,"chapterOcrBatchNoRegions": { "message": "這項翻譯工作沒有可供 AI 校正的 OCR 文字區域。" }
+  ,"chapterOcrBatchStart": { "message": "一鍵 AI 校正整章並批次重新翻譯" }
+  ,"chapterOcrBatchRunAgain": { "message": "再次 AI 校正整章" }
+  ,"chapterOcrBatchCancel": { "message": "取消整章校正" }
+  ,"chapterOcrBatchOpenOcr": { "message": "開啟 OCR 檢視" }
+  ,"chapterOcrBatchOpenBackground": { "message": "查看背景工作" }
+  ,"chapterOcrBatchStatus_preparing": { "message": "正在準備各頁 OCR 裁切圖" }
+  ,"chapterOcrBatchStatus_reviewing": { "message": "AI 正在校正整章 OCR" }
+  ,"chapterOcrBatchStatus_submitting": { "message": "正在彙整並採納 AI 建議" }
+  ,"chapterOcrBatchStatus_translating": { "message": "批量重新翻譯已排入背景工作" }
+  ,"chapterOcrBatchStatus_succeeded": { "message": "整章 AI 校正與批量翻譯已完成" }
+  ,"chapterOcrBatchStatus_failed": { "message": "整章 AI 校正未完成" }
+  ,"chapterOcrBatchStatus_cancel_requested": { "message": "正在取消整章工作" }
+  ,"chapterOcrBatchStatus_canceled": { "message": "整章工作已取消" }
+  ,"chapterOcrBatchPhase_preparing": { "message": "已準備 $1 / $2 頁（$3%）" }
+  ,"chapterOcrBatchPhase_reviewing": { "message": "已完成 $1 / $2 個 AI OCR 工作（$3%）" }
+  ,"chapterOcrBatchPhase_submitting": { "message": "正在建立批量文字修正工作…" }
+  ,"chapterOcrBatchPhase_translating": { "message": "後端正在批量重新翻譯…" }
+  ,"chapterOcrBatchSucceeded": { "message": "AI 成功區域" }
+  ,"chapterOcrBatchChanged": { "message": "已採納變更區域" }
+  ,"chapterOcrBatchFailed": { "message": "AI 失敗區域" }
+  ,"chapterOcrBatchCorrectionPages": { "message": "已重新翻譯頁面" }
+  ,"chapterOcrBatchUnchangedPages": { "message": "建議無變更頁面" }
+  ,"chapterOcrBatchFailedPages": { "message": "因 AI 失敗未重翻" }
+  ,"chapterOcrBatchUnchangedPageList": { "message": "AI 建議與原 OCR 相同，不需重新翻譯：" }
+  ,"chapterOcrBatchFailedPageList": { "message": "因 AI 建議失敗而未重新翻譯：" }
+  ,"chapterOcrBatchPartialFailurePageList": { "message": "部分區域失敗，但其他修正仍已重新翻譯：" }
+  ,"showPageNumbersLabel": { "message": "在漫畫頁面顯示圖片頁碼" }
+  ,"pageNumberBadge": { "message": "第 $1 頁" }
 }

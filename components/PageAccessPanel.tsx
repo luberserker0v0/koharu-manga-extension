@@ -7,6 +7,7 @@ export function PageAccessPanel() {
   const [pattern, setPattern] = useState<string | null>(null);
   const [granted, setGranted] = useState(false);
   const [pendingSourceOrigins, setPendingSourceOrigins] = useState<string[]>([]);
+  const [pendingSourceRequestId, setPendingSourceRequestId] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [sourceError, setSourceError] = useState(false);
 
@@ -17,8 +18,13 @@ export function PageAccessPanel() {
       setTabId(tab?.id ?? null);
       setPattern(nextPattern);
       if (nextPattern) setGranted(await browser.permissions.contains({ origins: [nextPattern] }));
-      const pending = await browser.runtime.sendMessage({ type: 'GET_PENDING_SOURCE_ORIGINS' }) as { origins?: string[] } | undefined;
+      const requestedSourceAccess = new URLSearchParams(location.search).get('sourceAccess');
+      const pending = await browser.runtime.sendMessage({
+        type: 'GET_PENDING_SOURCE_ORIGINS',
+        ...(requestedSourceAccess ? { requestId: requestedSourceAccess } : {}),
+      }) as { origins?: string[]; requestId?: string } | undefined;
       setPendingSourceOrigins(pending?.origins ?? []);
+      setPendingSourceRequestId(pending?.requestId ?? null);
       if (nextPattern && tab?.id !== undefined) {
         try {
           await browser.tabs.sendMessage(tab.id, { type: 'KOHARU_PAGE_PING' });
@@ -51,13 +57,22 @@ export function PageAccessPanel() {
   };
 
   const enableSourceOrigins = async () => {
-    if (!pendingSourceOrigins.length) return;
+    if (!pendingSourceOrigins.length || !pendingSourceRequestId) return;
     setSourceError(false);
     const accepted = await browser.permissions.request({ origins: pendingSourceOrigins });
     if (!accepted) { setSourceError(true); return; }
-    await browser.runtime.sendMessage({ type: 'CLEAR_PENDING_SOURCE_ORIGINS' });
-    setPendingSourceOrigins([]);
-    window.close();
+    try {
+      const completed = await browser.runtime.sendMessage({
+        type: 'COMPLETE_SOURCE_ORIGIN_ACCESS',
+        requestId: pendingSourceRequestId,
+      }) as { notified?: boolean } | undefined;
+      if (!completed?.notified) throw new Error('source_access_notification_failed');
+      setPendingSourceOrigins([]);
+      setPendingSourceRequestId(null);
+      window.close();
+    } catch {
+      setSourceError(true);
+    }
   };
 
   return (

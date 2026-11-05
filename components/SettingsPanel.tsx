@@ -123,6 +123,7 @@ export function SettingsPanel({ settings, onSave, onClose }: {
             placeholder="http://127.0.0.1:4100"
           />
         </label>
+        <p className="field-help">{t('comicCrawlerUrlHelp')}</p>
         <div className="form-grid crawler-credentials">
           <label>
             <span>{t('comicCrawlerUsernameLabel')}</span>

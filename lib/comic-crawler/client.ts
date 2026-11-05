@@ -7,6 +7,8 @@ import type {
   BrowserTarget,
   ChallengeDiscoveryJob,
   ChapterRenderContext,
+  ChapterImageManifest,
+  ChapterImageManifestResolvePagesResponse,
   ChapterImagesResponse,
   ChapterImagesProxyResponse,
   ChapterImagesVerificationData,
@@ -17,6 +19,17 @@ import type {
 } from './types';
 
 interface Envelope<T> { data?: T }
+type ComicCrawlerProxyResult<T> =
+  | { ok: true; data: T }
+  | {
+      ok: false;
+      error: {
+        message: string;
+        kind: ComicCrawlerError['kind'];
+        status?: number;
+        code?: string;
+      };
+    };
 
 interface ComicCrawlerClientOptions {
   useBackgroundProxy?: boolean;
@@ -49,6 +62,77 @@ function basicAuth(username: string, password: string): string {
   return `Basic ${encoded}`;
 }
 
+const MANIFEST_REVISION = /^sha256:[a-f0-9]{64}$/;
+const SOURCE_FINGERPRINT = /^(?:sha256|etag|opaque):.+/i;
+
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || !value) return false;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); }
+  catch { return false; }
+}
+
+function validChapterIdentity(value: unknown): value is ChapterImagesResponse['chapter'] {
+  if (!value || typeof value !== 'object') return false;
+  const chapter = value as Partial<ChapterImagesResponse['chapter']>;
+  return typeof chapter.id === 'string' && Boolean(chapter.id)
+    && isHttpUrl(chapter.canonicalUrl)
+    && chapter.stability === 'deterministic'
+    && ['adapter', 'normalized-url'].includes(chapter.identitySource ?? '');
+}
+
+function validImageDescriptors(value: unknown): value is ChapterImagesResponse['images'] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  return value.every((image, index) => {
+    if (!image || typeof image !== 'object') return false;
+    const descriptor = image as Partial<ChapterImagesResponse['images'][number]>;
+    if (typeof descriptor.id !== 'string' || !descriptor.id || ids.has(descriptor.id)
+      || descriptor.orderIndex !== index || !isHttpUrl(descriptor.url)
+      || (descriptor.sourceFingerprint !== undefined
+        && (typeof descriptor.sourceFingerprint !== 'string'
+          || !SOURCE_FINGERPRINT.test(descriptor.sourceFingerprint)))) return false;
+    ids.add(descriptor.id);
+    return true;
+  });
+}
+
+function validateManifest(value: ChapterImageManifest): ChapterImageManifest {
+  if (!value || typeof value !== 'object'
+    || typeof value.adapterId !== 'string' || !value.adapterId
+    || !validChapterIdentity(value.chapter)
+    || !value.identityResolver || typeof value.identityResolver.id !== 'string' || !value.identityResolver.id
+    || !Number.isSafeInteger(value.identityResolver.version) || value.identityResolver.version < 1
+    || typeof value.revision !== 'string' || !MANIFEST_REVISION.test(value.revision)
+    || typeof value.capturedAt !== 'string' || Number.isNaN(Date.parse(value.capturedAt))
+    || !validImageDescriptors(value.images)) {
+    throw new ComicCrawlerError('ComicCrawler returned an invalid chapter image manifest.', 'contract');
+  }
+  return value;
+}
+
+function validatePageResolution(
+  value: ChapterImageManifestResolvePagesResponse,
+  chapterId: string,
+  urls: string[],
+): ChapterImageManifestResolvePagesResponse {
+  if (!value || typeof value !== 'object' || value.chapterId !== chapterId
+    || typeof value.revision !== 'string' || !MANIFEST_REVISION.test(value.revision)
+    || !Array.isArray(value.matches) || value.matches.length !== urls.length
+    || value.matches.some((match, index) => {
+      if (!match || typeof match !== 'object' || match.url !== urls[index]
+        || !['matched', 'not_found', 'ambiguous'].includes(match.status)) return true;
+      if (match.status !== 'matched') return false;
+      return typeof match.pageId !== 'string' || !match.pageId
+        || !Number.isSafeInteger(match.orderIndex) || match.orderIndex < 0
+        || (match.sourceFingerprint !== undefined
+          && (typeof match.sourceFingerprint !== 'string'
+            || !SOURCE_FINGERPRINT.test(match.sourceFingerprint)));
+    })) {
+    throw new ComicCrawlerError('ComicCrawler returned an invalid page identity resolution.', 'contract');
+  }
+  return value;
+}
+
 export class ComicCrawlerClient {
   readonly baseUrl: string;
   private readonly authorization: string | null;
@@ -66,6 +150,50 @@ export class ComicCrawlerClient {
 
   private async proxy<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
     return await browser.runtime.sendMessage({ type, ...payload }) as T;
+  }
+
+  private async crawlerProxy<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+    const result = await this.proxy<ComicCrawlerProxyResult<T> | T>(type, payload);
+    if (result && typeof result === 'object' && 'ok' in result && typeof result.ok === 'boolean') {
+      if (result.ok) return result.data;
+      throw new ComicCrawlerError(
+        result.error.message,
+        result.error.kind,
+        result.error.status,
+        result.error.code,
+      );
+    }
+    // Accept the older raw proxy shape while an already-installed background
+    // service worker is being replaced during extension updates.
+    return result as T;
+  }
+
+  private proxyWithAbort<T>(
+    type: string,
+    payload: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+    cancel: { type: string; payload: Record<string, unknown> },
+  ): Promise<T> {
+    if (!signal) return this.proxy<T>(type, payload);
+    if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        callback();
+      };
+      const onAbort = () => finish(() => {
+        void this.proxy(cancel.type, cancel.payload).catch(() => undefined);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.proxy<T>(type, payload).then(
+        (value) => finish(() => resolve(value)),
+        (error: unknown) => finish(() => reject(error)),
+      );
+    });
   }
 
   private async request(pathOrUrl: string, init: RequestInit = {}): Promise<Response> {
@@ -131,13 +259,87 @@ export class ComicCrawlerClient {
     return this.json('/api/adapters/resolve', { method: 'POST', body: JSON.stringify({ url, mode: 'chapters' }), signal });
   }
 
+  async resolveChapterImageManifest(
+    url: string,
+    adapterId?: string,
+    signal?: AbortSignal,
+  ): Promise<ChapterImageManifest | null> {
+    if (this.useBackgroundProxy) {
+      const value = await this.crawlerProxy<ChapterImageManifest | null>('COMIC_CRAWLER_MANIFEST_RESOLVE', {
+        url,
+        ...(adapterId ? { adapterId } : {}),
+      });
+      return value ? validateManifest(value) : null;
+    }
+    const query = new URLSearchParams({ url });
+    if (adapterId) query.set('adapterId', adapterId);
+    try {
+      return validateManifest(await this.json<ChapterImageManifest>(
+        `/api/chapter-image-manifests/resolve?${query.toString()}`,
+        { signal },
+      ));
+    } catch (error) {
+      if (error instanceof ComicCrawlerError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  async getChapterImageManifest(chapterId: string, signal?: AbortSignal): Promise<ChapterImageManifest | null> {
+    if (!chapterId) throw new ComicCrawlerError('chapterId is required.', 'contract');
+    if (this.useBackgroundProxy) {
+      const value = await this.crawlerProxy<ChapterImageManifest | null>('COMIC_CRAWLER_MANIFEST_GET', { chapterId });
+      return value ? validateManifest(value) : null;
+    }
+    try {
+      return validateManifest(await this.json<ChapterImageManifest>(
+        `/api/chapter-image-manifests/${encodeURIComponent(chapterId)}`,
+        { signal },
+      ));
+    } catch (error) {
+      if (error instanceof ComicCrawlerError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  async resolveChapterImagePages(
+    chapterId: string,
+    urls: string[],
+    revision?: string,
+    signal?: AbortSignal,
+  ): Promise<ChapterImageManifestResolvePagesResponse> {
+    if (!chapterId || urls.length < 1 || urls.length > 500 || urls.some((url) => !isHttpUrl(url))
+      || (revision !== undefined && !MANIFEST_REVISION.test(revision))) {
+      throw new ComicCrawlerError('Invalid chapter page resolution request.', 'contract');
+    }
+    const payload = { urls, ...(revision ? { revision } : {}) };
+    const value = this.useBackgroundProxy
+      ? await this.crawlerProxy<ChapterImageManifestResolvePagesResponse>('COMIC_CRAWLER_MANIFEST_RESOLVE_PAGES', {
+          chapterId,
+          ...payload,
+        })
+      : await this.json<ChapterImageManifestResolvePagesResponse>(
+          `/api/chapter-image-manifests/${encodeURIComponent(chapterId)}/resolve-pages`,
+          { method: 'POST', body: JSON.stringify(payload), signal },
+        );
+    const validated = validatePageResolution(value, chapterId, urls);
+    if (revision && validated.revision !== revision) {
+      throw new ComicCrawlerError('ComicCrawler resolved pages against an unexpected manifest revision.', 'contract');
+    }
+    return validated;
+  }
+
   async extractChapterImages(url: string, options: ChapterImagesOptions = {}): Promise<ChapterImagesResponse> {
     const proxied = this.useBackgroundProxy
-      ? await this.proxy<ChapterImagesProxyResponse>('COMIC_CRAWLER_CHAPTER_IMAGES', {
-          url,
-          ...(options.renderContext ? { renderContext: options.renderContext } : {}),
-          ...(options.challengeDiscoveryId ? { challengeDiscoveryId: options.challengeDiscoveryId } : {}),
-        })
+      ? await this.proxyWithAbort<ChapterImagesProxyResponse>(
+          'COMIC_CRAWLER_CHAPTER_IMAGES',
+          {
+            url,
+            ...(options.renderContext ? { renderContext: options.renderContext } : {}),
+            ...(options.challengeDiscoveryId ? { challengeDiscoveryId: options.challengeDiscoveryId } : {}),
+          },
+          options.signal,
+          { type: 'COMIC_CRAWLER_CHAPTER_IMAGES_CANCEL', payload: { url } },
+        )
       : await this.json<ChapterImagesResponse>('/api/adapters/chapter-images', {
           method: 'POST',
           body: JSON.stringify({
@@ -158,23 +360,10 @@ export class ComicCrawlerClient {
     }
     const result = proxied as ChapterImagesResponse;
     if (!Array.isArray(result.imageUrls) || result.imageUrlCount !== result.imageUrls.length
-      || !result.chapter || typeof result.chapter.id !== 'string' || !result.chapter.id
-      || typeof result.chapter.canonicalUrl !== 'string' || !result.chapter.canonicalUrl
-      || result.chapter.stability !== 'deterministic'
-      || !['adapter', 'normalized-url'].includes(result.chapter.identitySource)
-      || !Array.isArray(result.images) || result.images.length !== result.imageUrls.length
-      || result.images.some((image, index) => !image || typeof image.id !== 'string' || !image.id
-        || image.orderIndex !== index || image.url !== result.imageUrls[index]
-        || (image.sourceFingerprint !== undefined
-          && (typeof image.sourceFingerprint !== 'string'
-            || !/^(?:sha256|etag|opaque):.+/i.test(image.sourceFingerprint))))
-      || new Set(result.images.map((image) => image.id)).size !== result.images.length) {
+      || !validChapterIdentity(result.chapter)
+      || !validImageDescriptors(result.images) || result.images.length !== result.imageUrls.length
+      || result.images.some((image, index) => image.url !== result.imageUrls[index])) {
       throw new ComicCrawlerError('ComicCrawler returned an invalid chapter-image count.', 'contract');
-    }
-    try {
-      new URL(result.chapter.canonicalUrl);
-    } catch {
-      throw new ComicCrawlerError('ComicCrawler returned an invalid canonical chapter URL.', 'contract');
     }
     return result;
   }

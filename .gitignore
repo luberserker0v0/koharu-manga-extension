@@ -6,4 +6,5 @@ coverage/
 .env.*
 !.env.example
 *.log
+*.pem
 .DS_Store

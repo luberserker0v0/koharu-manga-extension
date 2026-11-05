@@ -40,11 +40,11 @@ describe('text-region correction drafts', () => {
     expect(buildTextRegionPageCorrections(pages, drafts)).toEqual([
       {
         sourceImageId: 'source-1', baseRegionSetRevisionId: 'set-1',
-        regions: [{ regionId: 'region-1', sourceText: 'intergalactic\nEmpire' }],
+        operations: [{ type: 'update', regionId: 'region-1', sourceText: 'intergalactic\nEmpire' }],
       },
       {
         sourceImageId: 'source-2', baseRegionSetRevisionId: 'set-2',
-        regions: [{ regionId: 'region-2', geometry: { x: 120, y: 150, width: 320, height: 90, rotation: 0 } }],
+        operations: [{ type: 'update', regionId: 'region-2', geometry: { x: 120, y: 150, width: 320, height: 90, rotation: 0 } }],
       },
     ]);
   });
@@ -68,5 +68,39 @@ describe('text-region correction drafts', () => {
     expect(() => buildTextRegionPageCorrections(pages, new Map([
       [textRegionDraftKey('source-1', 'region-1'), outside],
     ]))).toThrowError('text_region_geometry_out_of_bounds');
+  });
+
+  it('batches create, update, and delete operations without conflicting updates', () => {
+    const pages = [page('source-1', 'set-1', 'region-1')];
+    const updated = draftFromRegion(pages[0]!.regions[0]!);
+    updated.sourceText = 'ignored because deleted';
+    const drafts = new Map([[textRegionDraftKey('source-1', 'region-1'), updated]]);
+    const created = new Map([['created-key', {
+      sourceImageId: 'source-1', clientOperationId: 'create-1', sourceText: 'missing text',
+      geometry: { x: 500, y: 700, width: 200, height: 80, rotation: 0 },
+    }]]);
+    const deleted = new Set([textRegionDraftKey('source-1', 'region-1')]);
+
+    expect(buildTextRegionPageCorrections(pages, drafts, created, deleted)).toEqual([{
+      sourceImageId: 'source-1',
+      baseRegionSetRevisionId: 'set-1',
+      operations: [
+        { type: 'delete', regionId: 'region-1' },
+        {
+          type: 'create', clientOperationId: 'create-1', sourceText: 'missing text',
+          geometry: { x: 500, y: 700, width: 200, height: 80, rotation: 0 },
+        },
+      ],
+    }]);
+  });
+
+  it('requires non-blank OCR text for a created region', () => {
+    const pages = [page('source-1', 'set-1', 'region-1')];
+    const created = new Map([['created-key', {
+      sourceImageId: 'source-1', clientOperationId: 'create-1', sourceText: '   ',
+      geometry: { x: 500, y: 700, width: 200, height: 80, rotation: 0 },
+    }]]);
+    expect(() => buildTextRegionPageCorrections(pages, new Map(), created))
+      .toThrowError('text_region_source_text_required');
   });
 });

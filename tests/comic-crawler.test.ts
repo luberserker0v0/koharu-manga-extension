@@ -35,12 +35,131 @@ function chapterImagesResponse(imageUrls: string[]) {
   };
 }
 
+function chapterManifestResponse() {
+  const extracted = chapterImagesResponse([
+    'https://cdn.test/1.jpg?token=old',
+    'https://cdn.test/2.jpg',
+  ]);
+  return {
+    adapterId: extracted.adapterId,
+    chapter: extracted.chapter,
+    identityResolver: { id: 'normalized-url', version: 1 },
+    revision: `sha256:${'a'.repeat(64)}`,
+    capturedAt: '2026-10-30T00:00:00.000Z',
+    images: extracted.images,
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ComicCrawler integration', () => {
+  it('reads and validates a passive chapter manifest without starting extraction', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: chapterManifestResponse(),
+    }), { status: 200 }));
+    const client = new ComicCrawlerClient(settings);
+
+    await expect(client.resolveChapterImageManifest(
+      'https://reader.test/chapter?part=1',
+      'reader',
+    )).resolves.toMatchObject({ adapterId: 'reader', chapter: { id: 'chapter-stable' } });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe('http://127.0.0.1:4100/api/chapter-image-manifests/resolve?url=https%3A%2F%2Freader.test%2Fchapter%3Fpart%3D1&adapterId=reader');
+    expect(init?.method).toBeUndefined();
+  });
+
+  it('treats a missing persisted manifest as an optional null result', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      error: 'Chapter image manifest was not found.',
+    }), { status: 404, headers: { 'content-type': 'application/json' } }));
+
+    await expect(new ComicCrawlerClient(settings).getChapterImageManifest('chapter-stable'))
+      .resolves.toBeNull();
+  });
+
+  it('uses ComicCrawler resolve-pages as the authoritative URL-to-page mapping', async () => {
+    const urls = ['https://renewed.test/1.jpg?token=new', 'https://renewed.test/unknown.jpg'];
+    const revision = `sha256:${'a'.repeat(64)}`;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: {
+      chapterId: 'chapter-stable',
+      revision,
+      matches: [
+        { url: urls[0], status: 'matched', pageId: 'page-1', orderIndex: 0, sourceFingerprint: 'etag:page-1' },
+        { url: urls[1], status: 'not_found' },
+      ],
+    } }), { status: 200 }));
+
+    await expect(new ComicCrawlerClient(settings).resolveChapterImagePages(
+      'chapter-stable',
+      urls,
+      revision,
+    )).resolves.toMatchObject({ matches: [{ status: 'matched', pageId: 'page-1' }, { status: 'not_found' }] });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe('http://127.0.0.1:4100/api/chapter-image-manifests/chapter-stable/resolve-pages');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ urls, revision });
+  });
+
+  it('proxies manifest calls without exposing ComicCrawler credentials to the page', async () => {
+    const sendMessage = vi.fn(async (message: { type: string }) => {
+      if (message.type === 'COMIC_CRAWLER_MANIFEST_RESOLVE') return chapterManifestResponse();
+      if (message.type === 'COMIC_CRAWLER_MANIFEST_RESOLVE_PAGES') return {
+        chapterId: 'chapter-stable',
+        revision: `sha256:${'a'.repeat(64)}`,
+        matches: [{ url: 'https://cdn.test/1.jpg', status: 'matched', pageId: 'page-1', orderIndex: 0 }],
+      };
+      throw new Error(`Unexpected message ${message.type}`);
+    });
+    vi.stubGlobal('browser', { runtime: { sendMessage } });
+    const client = new ComicCrawlerClient(settings, { useBackgroundProxy: true });
+
+    await client.resolveChapterImageManifest('https://reader.test/chapter');
+    await client.resolveChapterImagePages(
+      'chapter-stable',
+      ['https://cdn.test/1.jpg'],
+      `sha256:${'a'.repeat(64)}`,
+    );
+
+    expect(sendMessage.mock.calls[0]?.[0]).toEqual({
+      type: 'COMIC_CRAWLER_MANIFEST_RESOLVE',
+      url: 'https://reader.test/chapter',
+    });
+    expect(JSON.stringify(sendMessage.mock.calls)).not.toContain('secret');
+  });
+
+  it('preserves a manifest revision conflict across the extension background proxy', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        message: 'Chapter image manifest revision does not match.',
+        kind: 'api',
+        status: 409,
+      },
+    });
+    vi.stubGlobal('browser', { runtime: { sendMessage } });
+
+    await expect(new ComicCrawlerClient(settings, { useBackgroundProxy: true }).resolveChapterImagePages(
+      'chapter-stable',
+      ['https://cdn.test/1.jpg'],
+      `sha256:${'a'.repeat(64)}`,
+    )).rejects.toMatchObject({ kind: 'api', status: 409 });
+  });
+
+  it('rejects malformed manifest identity data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: {
+      ...chapterManifestResponse(),
+      revision: 'random-id',
+    } }), { status: 200 }));
+
+    await expect(new ComicCrawlerClient(settings).resolveChapterImageManifest('https://reader.test/chapter'))
+      .rejects.toMatchObject({ kind: 'contract' });
+  });
+
   it('uses Basic authentication without exposing credentials in request URLs', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     await new ComicCrawlerClient(settings).status();
@@ -167,6 +286,30 @@ describe('ComicCrawler integration', () => {
       url: 'https://reader.test/chapter',
       challengeDiscoveryId: 'challenge-1',
     });
+  });
+
+  it('cancels an active background chapter-image request when its signal aborts', async () => {
+    let finishRequest: ((value: ReturnType<typeof chapterImagesResponse>) => void) | undefined;
+    const sendMessage = vi.fn((message: { type: string }) => {
+      if (message.type === 'COMIC_CRAWLER_CHAPTER_IMAGES') {
+        return new Promise<ReturnType<typeof chapterImagesResponse>>((resolve) => { finishRequest = resolve; });
+      }
+      return Promise.resolve(undefined);
+    });
+    vi.stubGlobal('browser', { runtime: { sendMessage } });
+    const controller = new AbortController();
+    const request = new ComicCrawlerClient(settings, { useBackgroundProxy: true }).extractChapterImages(
+      'https://reader.test/chapter',
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'COMIC_CRAWLER_CHAPTER_IMAGES_CANCEL',
+      url: 'https://reader.test/chapter',
+    });
+    finishRequest?.(chapterImagesResponse(['https://cdn.test/ignored.jpg']));
   });
 
   it('reconstructs a typed verification error returned by the background proxy', async () => {

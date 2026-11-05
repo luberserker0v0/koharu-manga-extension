@@ -1,6 +1,6 @@
-import { apiSettingsForUntrustedContext, readApiSettingsFromStorage } from '../lib/storage/settings';
+import { apiSettingsForUntrustedContext, readApiSettingsFromStorage, UI_PREFERENCES_KEY, writePageNumberPreference } from '../lib/storage/settings';
 import { ComicCrawlerClient } from '../lib/comic-crawler/client';
-import { ChapterImagesVerificationRequiredError } from '../lib/comic-crawler/errors';
+import { ChapterImagesVerificationRequiredError, ComicCrawlerError } from '../lib/comic-crawler/errors';
 import { ComicCrawlerBrowserClientManager } from '../lib/comic-crawler/browser-client-manager';
 import { ComicCrawlerBrowserTaskCoordinator } from '../lib/comic-crawler/browser-task-coordinator';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../lib/comic-crawler/browser-task-store';
 import type {
   AdapterDiscoveryFeature,
+  ChapterImageManifestResolvePagesResponse,
   ChapterImagesProxyResponse,
   ChapterImagesVerificationData,
   ChapterRenderContext,
@@ -26,6 +27,7 @@ import {
 } from '../lib/storage/workflow';
 
 const PENDING_SOURCE_ORIGINS_KEY = 'pendingSourceOrigins';
+const SOURCE_ACCESS_REQUEST_TTL_MS = 10 * 60 * 1000;
 const COMIC_CRAWLER_MAINTENANCE_ALARM = 'comicCrawler.browserMaintenance';
 const COMIC_CRAWLER_MAINTENANCE_PERIOD_MINUTES = 0.5;
 const TERMINAL_CRAWLER_TASK_STATES = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
@@ -88,6 +90,27 @@ function validOriginPatterns(value: unknown): string[] {
   return [...patterns].slice(0, 100);
 }
 
+interface PendingSourceAccessRequest {
+  requestId: string;
+  tabId: number;
+  pageUrl: string;
+  origins: string[];
+  createdAt: number;
+}
+
+function validPendingSourceAccess(value: unknown): PendingSourceAccessRequest | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Partial<PendingSourceAccessRequest>;
+  const origins = validOriginPatterns(raw.origins);
+  if (typeof raw.requestId !== 'string' || !raw.requestId
+    || typeof raw.tabId !== 'number' || !Number.isInteger(raw.tabId)
+    || typeof raw.pageUrl !== 'string' || !raw.pageUrl
+    || typeof raw.createdAt !== 'number' || !Number.isFinite(raw.createdAt)
+    || Date.now() - raw.createdAt > SOURCE_ACCESS_REQUEST_TTL_MS
+    || !origins.length) return undefined;
+  return { requestId: raw.requestId, tabId: raw.tabId, pageUrl: raw.pageUrl, origins, createdAt: raw.createdAt };
+}
+
 function equivalentPageUrl(left: string, right: string): boolean {
   try {
     const normalizedLeft = new URL(left);
@@ -118,8 +141,37 @@ function validCrawlerRenderContext(value: unknown): ChapterRenderContext | undef
   };
 }
 
+async function crawlerProxyResult<T>(operation: () => Promise<T>): Promise<
+  | { ok: true; data: T }
+  | { ok: false; error: { message: string; kind: ComicCrawlerError['kind']; status?: number; code?: string } }
+> {
+  try {
+    return { ok: true, data: await operation() };
+  } catch (error) {
+    if (error instanceof ComicCrawlerError) {
+      return {
+        ok: false,
+        error: {
+          message: error.message,
+          kind: error.kind,
+          ...(error.status !== undefined ? { status: error.status } : {}),
+          ...(error.code ? { code: error.code } : {}),
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        message: error instanceof Error ? error.message : 'ComicCrawler request failed.',
+        kind: 'unavailable',
+      },
+    };
+  }
+}
+
 export default defineBackground(() => {
   const browserClientManager = new ComicCrawlerBrowserClientManager();
+  const activeChapterImageRequests = new Map<number, AbortController>();
   const browserTaskCoordinator = new ComicCrawlerBrowserTaskCoordinator(
     browserClientManager,
     readApiSettingsFromStorage,
@@ -191,6 +243,18 @@ export default defineBackground(() => {
   browser.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && 'backendSettings' in changes) {
       void runBrowserMaintenance().catch(() => undefined);
+      void browser.tabs.query({}).then(async (tabs) => {
+        await Promise.allSettled(tabs.flatMap((tab) => typeof tab.id === 'number'
+          ? [browser.tabs.sendMessage(tab.id, { type: 'API_SETTINGS_CHANGED' })]
+          : []));
+      }).catch(() => undefined);
+    }
+    if (areaName === 'local' && UI_PREFERENCES_KEY in changes) {
+      void browser.tabs.query({}).then(async (tabs) => {
+        await Promise.allSettled(tabs.flatMap((tab) => typeof tab.id === 'number'
+          ? [browser.tabs.sendMessage(tab.id, { type: 'API_SETTINGS_CHANGED' })]
+          : []));
+      }).catch(() => undefined);
     }
   });
 
@@ -293,6 +357,10 @@ export default defineBackground(() => {
       if (sender.tab) throw new Error('comicCrawler_browser_user_gesture_required');
     };
     if (message.type === 'GET_API_SETTINGS') return readApiSettingsFromStorage().then(apiSettingsForUntrustedContext);
+    if (message.type === 'SET_SHOW_PAGE_NUMBERS') {
+      const showPageNumbers = 'showPageNumbers' in message && message.showPageNumbers === true;
+      return writePageNumberPreference(showPageNumbers).then(apiSettingsForUntrustedContext);
+    }
     if (message.type === 'CHECK_SOURCE_ORIGINS') {
       const origins = validOriginPatterns('origins' in message ? message.origins : undefined);
       return (async () => {
@@ -301,17 +369,99 @@ export default defineBackground(() => {
         for (const origin of origins) {
           if (!await browser.permissions.contains({ origins: [origin] })) missing.push(origin);
         }
-        await browser.storage.session.set({ [PENDING_SOURCE_ORIGINS_KEY]: missing });
-        return { granted: false, missing };
+        const tabId = sender.tab?.id;
+        const pageUrl = 'pageUrl' in message && typeof message.pageUrl === 'string'
+          ? message.pageUrl
+          : sender.tab?.url;
+        if (typeof tabId !== 'number' || !pageUrl || !sender.tab?.url || !equivalentPageUrl(sender.tab.url, pageUrl)) {
+          throw new Error('source_access_page_mismatch');
+        }
+        const pending: PendingSourceAccessRequest = {
+          requestId: crypto.randomUUID(),
+          tabId,
+          pageUrl,
+          origins: missing,
+          createdAt: Date.now(),
+        };
+        await browser.storage.session.set({ [PENDING_SOURCE_ORIGINS_KEY]: pending });
+        return { granted: false, missing, requestId: pending.requestId };
       })();
     }
     if (message.type === 'GET_PENDING_SOURCE_ORIGINS') {
-      return browser.storage.session.get(PENDING_SOURCE_ORIGINS_KEY).then((stored) => ({
-        origins: validOriginPatterns(stored[PENDING_SOURCE_ORIGINS_KEY]),
-      }));
+      return (async () => {
+        const stored = await browser.storage.session.get(PENDING_SOURCE_ORIGINS_KEY);
+        const pending = validPendingSourceAccess(stored[PENDING_SOURCE_ORIGINS_KEY]);
+        if (!pending) {
+          await browser.storage.session.remove(PENDING_SOURCE_ORIGINS_KEY);
+          return { origins: [] };
+        }
+        const requestedId = 'requestId' in message && typeof message.requestId === 'string'
+          ? message.requestId
+          : undefined;
+        if (requestedId) {
+          return requestedId === pending.requestId
+            ? { origins: pending.origins, requestId: pending.requestId, pageUrl: pending.pageUrl }
+            : { origins: [] };
+        }
+        const [active] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (active?.id !== pending.tabId || !active.url || !equivalentPageUrl(active.url, pending.pageUrl)) {
+          return { origins: [] };
+        }
+        return { origins: pending.origins, requestId: pending.requestId, pageUrl: pending.pageUrl };
+      })();
+    }
+    if (message.type === 'OPEN_SOURCE_ORIGIN_ACCESS') {
+      return (async () => {
+        const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : '';
+        const stored = await browser.storage.session.get(PENDING_SOURCE_ORIGINS_KEY);
+        const pending = validPendingSourceAccess(stored[PENDING_SOURCE_ORIGINS_KEY]);
+        if (!pending || pending.requestId !== requestId || sender.tab?.id !== pending.tabId
+          || !sender.tab.url || !equivalentPageUrl(sender.tab.url, pending.pageUrl)) {
+          throw new Error('source_access_request_expired');
+        }
+        const action = browser.action as typeof browser.action & { openPopup?: () => Promise<void> };
+        try {
+          if (typeof action.openPopup !== 'function') throw new Error('open_popup_unavailable');
+          await action.openPopup();
+          return { opened: 'popup' as const };
+        } catch {
+          await browser.tabs.create({
+            url: browser.runtime.getURL(`/popup.html?sourceAccess=${encodeURIComponent(pending.requestId)}`),
+          });
+          return { opened: 'tab' as const };
+        }
+      })();
+    }
+    if (message.type === 'COMPLETE_SOURCE_ORIGIN_ACCESS') {
+      return (async () => {
+        const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : '';
+        const stored = await browser.storage.session.get(PENDING_SOURCE_ORIGINS_KEY);
+        const pending = validPendingSourceAccess(stored[PENDING_SOURCE_ORIGINS_KEY]);
+        if (!pending || pending.requestId !== requestId) throw new Error('source_access_request_expired');
+        if (!await browser.permissions.contains({ origins: pending.origins })) {
+          throw new Error('source_host_permission_required');
+        }
+        const tab = await browser.tabs.get(pending.tabId);
+        if (!tab.url || !equivalentPageUrl(tab.url, pending.pageUrl)) throw new Error('source_access_page_mismatch');
+        await browser.tabs.sendMessage(pending.tabId, {
+          type: 'SOURCE_ORIGINS_GRANTED',
+          requestId: pending.requestId,
+          pageUrl: pending.pageUrl,
+        });
+        await browser.storage.session.remove(PENDING_SOURCE_ORIGINS_KEY);
+        return { notified: true };
+      })();
     }
     if (message.type === 'CLEAR_PENDING_SOURCE_ORIGINS') {
-      return browser.storage.session.remove(PENDING_SOURCE_ORIGINS_KEY);
+      return (async () => {
+        const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+        if (requestId) {
+          const stored = await browser.storage.session.get(PENDING_SOURCE_ORIGINS_KEY);
+          const pending = validPendingSourceAccess(stored[PENDING_SOURCE_ORIGINS_KEY]);
+          if (pending && pending.requestId !== requestId) return;
+        }
+        await browser.storage.session.remove(PENDING_SOURCE_ORIGINS_KEY);
+      })();
     }
     if (message.type === 'BACKEND_REQUEST') {
       const health = 'health' in message && message.health === true;
@@ -349,80 +499,133 @@ export default defineBackground(() => {
     };
     if (message.type === 'COMIC_CRAWLER_STATUS') return crawlerClient().then((client) => client.status());
     if (message.type === 'COMIC_CRAWLER_RESOLVE_ADAPTER') return crawlerClient().then((client) => client.resolveAdapter(pageUrl()));
+    if (message.type === 'COMIC_CRAWLER_MANIFEST_RESOLVE') {
+      const adapterId = 'adapterId' in message && typeof message.adapterId === 'string'
+        ? message.adapterId.trim()
+        : undefined;
+      return crawlerProxyResult(async () => (
+        await crawlerClient()
+      ).resolveChapterImageManifest(pageUrl(), adapterId || undefined));
+    }
+    if (message.type === 'COMIC_CRAWLER_MANIFEST_GET') {
+      const chapterId = 'chapterId' in message && typeof message.chapterId === 'string'
+        ? message.chapterId.trim()
+        : '';
+      if (!chapterId || chapterId.length > 512) return Promise.reject(new Error('Invalid chapter ID.'));
+      return crawlerProxyResult(async () => (await crawlerClient()).getChapterImageManifest(chapterId));
+    }
+    if (message.type === 'COMIC_CRAWLER_MANIFEST_RESOLVE_PAGES') {
+      const chapterId = 'chapterId' in message && typeof message.chapterId === 'string'
+        ? message.chapterId.trim()
+        : '';
+      const revision = 'revision' in message && typeof message.revision === 'string'
+        ? message.revision
+        : undefined;
+      const rawUrls = 'urls' in message && Array.isArray(message.urls) ? message.urls : [];
+      const urls = rawUrls.filter((url): url is string => typeof url === 'string');
+      if (!chapterId || chapterId.length > 512 || urls.length !== rawUrls.length
+        || urls.length < 1 || urls.length > 500) {
+        return Promise.reject(new Error('Invalid chapter page resolution request.'));
+      }
+      return crawlerProxyResult(async () => (await crawlerClient()).resolveChapterImagePages(
+        chapterId, urls, revision,
+      )) as Promise<
+        | { ok: true; data: ChapterImageManifestResolvePagesResponse }
+        | { ok: false; error: { message: string; kind: ComicCrawlerError['kind']; status?: number; code?: string } }
+      >;
+    }
     if (message.type === 'COMIC_CRAWLER_CHAPTER_IMAGES') {
       return (async () => {
         const url = pageUrl();
-        await browserClientStartup;
-        const prepared = await prepareCurrentCrawlerTab();
-        if (!prepared.resource || !equivalentPageUrl(prepared.resource.url, url)) {
-          throw new Error('comicCrawler_browser_target_required');
+        const tabId = sender.tab?.id;
+        const requestController = new AbortController();
+        if (typeof tabId === 'number') {
+          activeChapterImageRequests.get(tabId)?.abort();
+          activeChapterImageRequests.set(tabId, requestController);
         }
-        const workspace = await browserTaskCoordinator.run();
-        const resource = workspace.client.resource;
-        if (workspace.client.status !== 'connected' || !workspace.client.workerId || !resource
-          || !equivalentPageUrl(resource.url, url)) {
-          throw new Error('comicCrawler_browser_target_required');
-        }
-        const standaloneChallenge = workspace.task
-          && !workspace.task.taskId
-          && equivalentPageUrl(workspace.task.targetUrl, url)
-          && workspace.task.challengeDiscoveryId
-          ? workspace.task
-          : undefined;
-        if (standaloneChallenge && standaloneChallenge.status !== 'verification_completed'
-          && !TERMINAL_CRAWLER_TASK_STATES.has(standaloneChallenge.status)) {
-          const stored = standaloneChallenge.chapterImagesVerification;
-          if (stored) {
-            const status = standaloneChallenge.verificationStatus || stored.challengeStatus;
+        try {
+          await browserClientStartup;
+          const prepared = await prepareCurrentCrawlerTab();
+          if (!prepared.resource || !equivalentPageUrl(prepared.resource.url, url)) {
+            throw new Error('comicCrawler_browser_target_required');
+          }
+          const workspace = await browserTaskCoordinator.run();
+          const resource = workspace.client.resource;
+          if (workspace.client.status !== 'connected' || !workspace.client.workerId || !resource
+            || !equivalentPageUrl(resource.url, url)) {
+            throw new Error('comicCrawler_browser_target_required');
+          }
+          const standaloneChallenge = workspace.task
+            && !workspace.task.taskId
+            && equivalentPageUrl(workspace.task.targetUrl, url)
+            && workspace.task.challengeDiscoveryId
+            ? workspace.task
+            : undefined;
+          if (standaloneChallenge && standaloneChallenge.status !== 'verification_completed'
+            && !TERMINAL_CRAWLER_TASK_STATES.has(standaloneChallenge.status)) {
+            const stored = standaloneChallenge.chapterImagesVerification;
+            if (stored) {
+              const status = standaloneChallenge.verificationStatus || stored.challengeStatus;
+              return {
+                kind: 'verification_required',
+                data: {
+                  ...stored,
+                  challengeStatus: status,
+                  challenge: { ...stored.challenge, status },
+                },
+              } satisfies ChapterImagesProxyResponse;
+            }
+          }
+          const renderContext = validCrawlerRenderContext('renderContext' in message ? message.renderContext : undefined);
+          const challengeDiscoveryId = standaloneChallenge?.status === 'verification_completed'
+            ? standaloneChallenge.challengeDiscoveryId
+            : undefined;
+          try {
+            const result = await (await crawlerClient()).extractChapterImages(url, {
+              signal: requestController.signal,
+              browserTarget: {
+                mode: 'existing-tab',
+                workerId: workspace.client.workerId,
+                resourceId: resource.resourceId,
+              },
+              ...(renderContext ? { renderContext } : {}),
+              ...(challengeDiscoveryId ? { challengeDiscoveryId } : {}),
+            });
+            if (challengeDiscoveryId) await clearBrowserTask();
+            return result;
+          } catch (error) {
+            if (!(error instanceof ChapterImagesVerificationRequiredError)) throw error;
+            const verification: ChapterImagesVerificationData = error.verification;
+            await writeBrowserTask({
+              targetUrl: url,
+              challengeDiscoveryId: verification.challengeDiscoveryId,
+              status: 'waiting_verification',
+              verificationStatus: verification.challengeStatus,
+              chapterImagesVerification: verification,
+              updatedAt: new Date().toISOString(),
+            });
+            void runBrowserMaintenance().catch(() => undefined);
             return {
               kind: 'verification_required',
-              data: {
-                ...stored,
-                challengeStatus: status,
-                challenge: { ...stored.challenge, status },
-              },
+              data: verification,
+              message: error.message,
             } satisfies ChapterImagesProxyResponse;
           }
-        }
-        const renderContext = validCrawlerRenderContext('renderContext' in message ? message.renderContext : undefined);
-        const challengeDiscoveryId = standaloneChallenge?.status === 'verification_completed'
-          ? standaloneChallenge.challengeDiscoveryId
-          : undefined;
-        try {
-          const result = await (await crawlerClient()).extractChapterImages(url, {
-            browserTarget: {
-              mode: 'existing-tab',
-              workerId: workspace.client.workerId,
-              resourceId: resource.resourceId,
-            },
-            ...(renderContext ? { renderContext } : {}),
-            ...(challengeDiscoveryId ? { challengeDiscoveryId } : {}),
-          });
-          if (challengeDiscoveryId) await clearBrowserTask();
-          return result;
-        } catch (error) {
-          if (!(error instanceof ChapterImagesVerificationRequiredError)) throw error;
-          const verification: ChapterImagesVerificationData = error.verification;
-          await writeBrowserTask({
-            targetUrl: url,
-            challengeDiscoveryId: verification.challengeDiscoveryId,
-            status: 'waiting_verification',
-            verificationStatus: verification.challengeStatus,
-            chapterImagesVerification: verification,
-            updatedAt: new Date().toISOString(),
-          });
-          void runBrowserMaintenance().catch(() => undefined);
-          return {
-            kind: 'verification_required',
-            data: verification,
-            message: error.message,
-          } satisfies ChapterImagesProxyResponse;
+        } finally {
+          if (typeof tabId === 'number' && activeChapterImageRequests.get(tabId) === requestController) {
+            activeChapterImageRequests.delete(tabId);
+          }
         }
       })();
     }
     if (message.type === 'COMIC_CRAWLER_CHAPTER_IMAGES_CANCEL') {
       return (async () => {
         const url = pageUrl();
+        const tabId = sender.tab?.id;
+        if (typeof tabId === 'number') {
+          activeChapterImageRequests.get(tabId)?.abort();
+          activeChapterImageRequests.delete(tabId);
+        }
         const task = await readBrowserTask();
         if (!task?.challengeDiscoveryId || task.taskId || !equivalentPageUrl(task.targetUrl, url)) return;
         const resource = (await browserClientManager.snapshot()).resource;

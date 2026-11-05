@@ -3,6 +3,14 @@ import { vi } from 'vitest';
 import { BackendApiError } from '../lib/api/errors';
 import { consumeMessageEventStream, JobMonitor } from '../lib/api/job-monitor';
 import type { BackendClient } from '../lib/api/backend-client';
+import type { JobResource } from '../lib/api/types';
+
+function job(status: JobResource['status']): JobResource {
+  return {
+    id: 'job-1', type: 'translation', status, stage: status, result: null, error: null,
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:01.000Z',
+  };
+}
 
 describe('message-envelope SSE parsing', () => {
   it('parses split chunks and ignores heartbeat comments', async () => {
@@ -40,5 +48,35 @@ describe('message-envelope SSE parsing', () => {
 
     expect(onError).toHaveBeenCalledWith(error);
     expect(onTransport).toHaveBeenLastCalledWith('stopped');
+  });
+
+  it('coalesces an SSE event storm into a bounded number of authoritative reconciliations', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let index = 0; index < 100; index += 1) {
+          controller.enqueue(encoder.encode(`data: {"id":${index},"type":"pipeline_progress","createdAt":"2026-01-01T00:00:00.${String(index).padStart(3, '0')}Z"}\n\n`));
+        }
+        controller.close();
+      },
+    });
+    const getJob = vi.fn()
+      .mockResolvedValueOnce(job('running'))
+      .mockResolvedValueOnce(job('succeeded'));
+    const client = {
+      getJob,
+      stream: vi.fn().mockResolvedValue(new Response(body, { status: 200 })),
+    } as unknown as BackendClient;
+    const onEvent = vi.fn();
+    const onJob = vi.fn();
+    const monitor = new JobMonitor(client, 'job-1', {
+      onJob, onEvent, onError: vi.fn(), onTransport: vi.fn(),
+    });
+
+    await monitor.start();
+
+    expect(onEvent).toHaveBeenCalledTimes(100);
+    expect(getJob).toHaveBeenCalledTimes(2);
+    expect(onJob).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'succeeded' }));
   });
 });

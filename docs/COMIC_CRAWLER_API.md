@@ -1,8 +1,9 @@
 # ComicCrawler chapter-image API
 
-Reviewed against ComicCrawler commit `d471ada1a44f8aa01bebdcb6a23cd2bacad52881`,
-which includes Browser-target recovery, stable chapter/page identities, and the
-chapter-image verification handoff contract.
+Reviewed against local ComicCrawler commit `d9c47481d743032041a1ed8a336e44dd02c500b9`
+(tree-equivalent to GitHub `main` commit `56f595c4759f974b8cdfac1a5fc4d7e4938bad57`).
+This contract includes Browser-target recovery, stable chapter/page identities,
+the chapter-image verification handoff, and persisted passive manifests.
 
 The earlier API gap is resolved. ComicCrawler now provides one production endpoint that returns every image URL from a chapter in reading order:
 
@@ -79,6 +80,30 @@ timeout.
 
 The extension never reads ComicCrawler output folders or preview paths. If no approved adapter matches, the user may explicitly queue Agent discovery and continue immediately with generic page `<img>` detection. AO-generated adapters still require review in ComicCrawler WebUI.
 
+## Persisted passive chapter manifests
+
+A complete successful chapter-image extraction atomically saves the latest
+owner-scoped manifest. Applying an existing translation uses only these passive
+routes:
+
+```http
+GET /api/chapter-image-manifests/resolve?url={chapterUrl}&adapterId={optionalAdapterId}
+GET /api/chapter-image-manifests/{chapterId}
+POST /api/chapter-image-manifests/{chapterId}/resolve-pages
+```
+
+The extension sends naturally observed, loaded image URLs to `resolve-pages` in
+batches of at most 500 and uses the returned opaque `pageId` values. It does not
+reproduce ComicCrawler's URL identity algorithm. `matched`, `not_found`, and
+`ambiguous` are handled explicitly; ambiguous candidates remain pending until
+enough matching DOM images have loaded. The stored manifest revision is sent as
+an optimistic guard, and HTTP `409` stops replacement rather than risking a
+stale translation.
+
+Manifest reads never resolve an Adapter, acquire a Browser Client, navigate,
+scroll, or retry extraction. The extension downloads translated bytes only from
+the Manga Translation Backend after a page ID has been matched.
+
 ## Existing-tab verification handoff
 
 If the chapter page requires human verification, ComicCrawler returns HTTP
@@ -136,7 +161,7 @@ The extension never queues this request without user confirmation and never prom
 
 The extension also supports explicit crawler tasks against the user's approved tab.
 The SDK registers the local tab and returns an opaque `resourceId`. Task creation
-uses the REST contract from ComicCrawler v0.2.0:
+uses the REST contract from ComicCrawler v0.5.0:
 
 ```http
 POST /api/tasks
@@ -155,7 +180,7 @@ POST /api/tasks
 
 The extension never sends the native browser tab ID. Browser Client enrollment,
 WebSocket discovery, command handling, and resource registration are delegated to
-`@comiccrawler/browser-client-sdk@0.2.0`.
+`@comiccrawler/browser-client-sdk@0.5.0`.
 
 ### Recovering a process-scoped Browser target
 

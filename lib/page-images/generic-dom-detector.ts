@@ -195,6 +195,7 @@ function pushCandidate(
   byUrl: Map<string, PageImageCandidate>,
   maxCandidates: number,
   pending: PendingCandidate,
+  preserveDuplicateUrls = false,
 ): void {
   if (candidates.length >= maxCandidates || !pending.sourceUrl) return;
   const id = domId(pending.element);
@@ -211,14 +212,15 @@ function pushCandidate(
     targetKind: pending.targetKind,
     selected: true,
   };
-  const previous = byUrl.get(pending.sourceUrl);
+  const candidateKey = preserveDuplicateUrls ? id : pending.sourceUrl;
+  const previous = byUrl.get(candidateKey);
   if (previous) {
     if ((candidate.width ?? 0) * (candidate.height ?? 0) > (previous.width ?? 0) * (previous.height ?? 0)) {
       Object.assign(previous, candidate, { id: previous.id, order: previous.order });
     }
     return;
   }
-  byUrl.set(pending.sourceUrl, candidate);
+  byUrl.set(candidateKey, candidate);
   candidates.push(candidate);
 }
 
@@ -236,10 +238,13 @@ function traverseElements(visit: (element: Element) => void): void {
 }
 
 /** Live `<img>` scan: light DOM plus shadow-DOM images missed by `document.images`. */
-function collectImages(maxCandidates: number): PageImageCandidate[] {
+function collectImages(maxCandidates: number, preserveDuplicateUrls = false): PageImageCandidate[] {
   const candidates: PageImageCandidate[] = [];
   const byUrl = new Map<string, PageImageCandidate>();
+  const seenElements = new Set<HTMLImageElement>();
   const consider = (image: HTMLImageElement) => {
+    if (seenElements.has(image)) return;
+    seenElements.add(image);
     if (candidates.length >= maxCandidates || !isPlausible(image)) return;
     const sourceUrl = normalizedImageUrl(image);
     if (!sourceUrl) return;
@@ -250,7 +255,7 @@ function collectImages(maxCandidates: number): PageImageCandidate[] {
       height: image.naturalHeight || Math.round(image.getBoundingClientRect().height) || null,
       targetKind: 'img',
       loadStatus: image.complete && image.naturalWidth > 0 ? 'loaded' : 'pending',
-    });
+    }, preserveDuplicateUrls);
   };
   for (const image of Array.from(document.images)) consider(image);
   traverseElements((element) => {
@@ -338,13 +343,18 @@ function collectStatic(maxCandidates: number): PageImageCandidate[] {
   return candidates;
 }
 
-function mergeCandidates(lists: PageImageCandidate[][], maxCandidates: number): PageImageCandidate[] {
+function mergeCandidates(
+  lists: PageImageCandidate[][],
+  maxCandidates: number,
+  preserveDuplicateUrls = false,
+): PageImageCandidate[] {
   const merged: PageImageCandidate[] = [];
-  const byUrl = new Map<string, PageImageCandidate>();
+  const seen = new Set<string>();
   for (const list of lists) {
     for (const candidate of list) {
-      if (merged.length >= maxCandidates || byUrl.has(candidate.sourceUrl)) continue;
-      byUrl.set(candidate.sourceUrl, candidate);
+      const key = preserveDuplicateUrls ? candidate.id : candidate.sourceUrl;
+      if (merged.length >= maxCandidates || seen.has(key)) continue;
+      seen.add(key);
       merged.push(candidate);
     }
   }
@@ -358,13 +368,18 @@ export class GenericDomImageDetector implements ImageDetector {
     const startedAt = Date.now();
     const originalX = window.scrollX;
     const originalY = window.scrollY;
+    const preserveDuplicateUrls = options.preserveDuplicateUrls === true;
     const statics = collectStatic(this.limits.maxCandidates);
     let images: PageImageCandidate[] = [];
     try {
       const iterations = options.deep ? this.limits.maxViewportAdvances : 1;
       for (let index = 0; index < iterations; index += 1) {
         if (options.signal?.aborted) throw abortError();
-        images = mergeCandidates([collectImages(this.limits.maxCandidates), statics], this.limits.maxCandidates);
+        images = mergeCandidates(
+          [collectImages(this.limits.maxCandidates, preserveDuplicateUrls), statics],
+          this.limits.maxCandidates,
+          preserveDuplicateUrls,
+        );
         options.onProgress?.(images.length);
         if (!options.deep || images.length >= this.limits.maxCandidates || Date.now() - startedAt >= this.limits.maxDurationMs) break;
         const bottom = Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) - window.innerHeight;
@@ -377,14 +392,14 @@ export class GenericDomImageDetector implements ImageDetector {
       await Promise.all(elements.map(async (image) => {
         const url = normalizedImageUrl(image);
         if (!images.some((candidate) => candidate.sourceUrl === url)) return;
-        status.set(url, await ensureImageLoaded(image, this.limits.imageLoadTimeoutMs, options.signal));
+        status.set(domId(image), await ensureImageLoaded(image, this.limits.imageLoadTimeoutMs, options.signal));
       }));
-      const live = collectImages(this.limits.maxCandidates);
-      images = mergeCandidates([live, statics], this.limits.maxCandidates).map((candidate, order) => ({
+      const live = collectImages(this.limits.maxCandidates, preserveDuplicateUrls);
+      images = mergeCandidates([live, statics], this.limits.maxCandidates, preserveDuplicateUrls).map((candidate, order) => ({
         ...candidate,
         order,
         loadStatus: candidate.targetKind === 'img'
-          ? (status.get(candidate.sourceUrl) === false ? 'failed' : 'loaded')
+          ? (status.get(candidate.id) === false ? 'failed' : 'loaded')
           : 'loaded',
       }));
       const warnings = images.some((candidate) => candidate.targetKind === 'canvas') ? ['canvas_snapshot'] : [];
@@ -418,4 +433,41 @@ export function findCandidateElement(candidate: PageImageCandidate): HTMLImageEl
     if (normalizedImageUrl(image) === candidate.sourceUrl) return image;
   }
   return null;
+}
+
+/** Resolve many candidates with one bounded DOM/shadow-DOM traversal. */
+export function findCandidateTargets(candidates: readonly PageImageCandidate[]): Map<string, Element> {
+  const resolved = new Map<string, Element>();
+  const byDomId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const bySourceUrl = new Map<string, PageImageCandidate[]>();
+  for (const candidate of candidates) {
+    if (candidate.domLocator) {
+      try {
+        const located = document.querySelector(candidate.domLocator);
+        if (located) resolved.set(candidate.id, located);
+      } catch { /* fall through to the bounded traversal */ }
+    }
+    const sourceUrl = absoluteHttpUrl(candidate.sourceUrl);
+    if (!sourceUrl) continue;
+    const matches = bySourceUrl.get(sourceUrl) ?? [];
+    matches.push(candidate);
+    bySourceUrl.set(sourceUrl, matches);
+  }
+  const usedElements = new Set<Element>(resolved.values());
+  traverseElements((element) => {
+    const id = domIds.get(element);
+    const direct = id ? byDomId.get(id) : undefined;
+    if (direct && !resolved.has(direct.id)) {
+      resolved.set(direct.id, element);
+      usedElements.add(element);
+      return;
+    }
+    if (!(element instanceof HTMLImageElement) || usedElements.has(element)) return;
+    const sourceUrl = normalizedImageUrl(element);
+    const match = bySourceUrl.get(sourceUrl)?.find((candidate) => !resolved.has(candidate.id));
+    if (!match) return;
+    resolved.set(match.id, element);
+    usedElements.add(element);
+  });
+  return resolved;
 }

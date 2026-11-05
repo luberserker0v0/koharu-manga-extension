@@ -24,6 +24,7 @@ describe('job state normalization', () => {
   it.each([
     ['waiting_dependency', 'waiting_dependency'],
     ['running', 'waiting_prerequisite'],
+    ['running', 'waiting_manga_processor_review'],
     ['running', 'waiting_koharu_review'],
     ['running', 'waiting_pipeline'],
   ])('treats %s / %s as waiting rather than failed', (status, stage) => {

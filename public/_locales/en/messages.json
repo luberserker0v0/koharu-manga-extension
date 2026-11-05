@@ -6,7 +6,7 @@
   "loadingExtension": { "message": "Opening your workspace…" },
   "openSettings": { "message": "Open backend settings" },
   "closeSettings": { "message": "Close settings" },
-  "backendReady": { "message": "Backend and Koharu are ready" },
+  "backendReady": { "message": "Backend and manga processor are ready" },
   "backendNotChecked": { "message": "Connection not checked" },
   "checkingBackend": { "message": "Checking backend…" },
   "checkConnection": { "message": "Check" },
@@ -31,7 +31,7 @@
   "settingsTitle": { "message": "Backend settings" },
   "apiBaseUrlLabel": { "message": "Versioned API base URL" },
   "apiBaseUrlPlaceholder": { "message": "http://127.0.0.1:4001/api/v1" },
-  "apiBaseUrlHelp": { "message": "The URL must end in /api/v1. A host permission may be requested when you save." },
+  "apiBaseUrlHelp": { "message": "The URL must end in /api/v1. A host permission may be requested when you save. On a phone, 127.0.0.1 is the phone itself; use the backend host's trusted LAN or private-network address." },
   "bearerTokenLabel": { "message": "Bearer token (optional)" },
   "bearerTokenPlaceholder": { "message": "Leave blank when authentication is disabled" },
   "bearerTokenHelp": { "message": "Stored only in extension-local storage and hidden from page scripts." },
@@ -40,6 +40,7 @@
   "comicCrawlerAutoApplyPreviousLabel": { "message": "Auto-apply previous ComicCrawler chapter translations" },
   "comicCrawlerAutoApplyPreviousHelp": { "message": "When a page is recognized as a translated chapter, apply its successful matching job without opening the workspace." },
   "comicCrawlerUrlLabel": { "message": "ComicCrawler service URL" },
+  "comicCrawlerUrlHelp": { "message": "On a phone, use the ComicCrawler host's trusted LAN or private-network address instead of 127.0.0.1." },
   "comicCrawlerUsernameLabel": { "message": "Basic-auth username" },
   "comicCrawlerPasswordLabel": { "message": "Basic-auth password" },
   "comicCrawlerAuthHelp": { "message": "Credentials are stored only in extension-local storage and are never shown to the page." },
@@ -158,6 +159,12 @@
   "sourceLanguageLabel": { "message": "Source language (optional)" },
   "sourceLanguagePlaceholder": { "message": "ja" },
   "sourceLanguageAutomatic": { "message": "Automatic / unspecified" },
+  "sourceLanguageAdd": { "message": "Add a source language" },
+  "sourceLanguagePrimary": { "message": "Primary" },
+  "sourceLanguageOrderHelp": { "message": "The first language is primary. Later languages are lower-priority OCR and translation context." },
+  "sourceLanguageMoveUp": { "message": "Move $1 up" },
+  "sourceLanguageMoveDown": { "message": "Move $1 down" },
+  "sourceLanguageRemove": { "message": "Remove $1" },
   "exportFormatLabel": { "message": "Export format" },
   "exportRendered": { "message": "Rendered images" },
   "exportPsd": { "message": "Photoshop document" },
@@ -205,6 +212,10 @@
   "jobOutcomeDetail": { "message": "Outcome: $OUTCOME$", "placeholders": { "outcome": { "content": "$1" } } },
   "failedChildTitle": { "message": "Failed child job $ID$", "placeholders": { "id": { "content": "$1" } } },
   "diagnosticsTitle": { "message": "Diagnostics" },
+  "ocrLanguageResolutionTitle": { "message": "OCR language selection" },
+  "ocrLanguageEngineDetail": { "message": "OCR engine: $1" },
+  "ocrLanguageSourceDetail": { "message": "Source languages: $1" },
+  "ocrLanguageHintsNotApplied": { "message": "The languages selected the OCR engine, but the current manga processor did not receive explicit language hints." },
   "cancelJob": { "message": "Cancel job" },
   "requestingCancellation": { "message": "Requesting cancellation…" },
   "recommendedActionLabel": { "message": "Recommended action" },
@@ -241,6 +252,14 @@
   "eventsTitle": { "message": "Event history" },
   "eventsEmpty": { "message": "Waiting for the first persisted event." },
   "eventsNewestFirst": { "message": "Newest events appear first." },
+  "showMoreEvents": { "message": "Show $COUNT$ more", "placeholders": { "count": { "content": "$1" } } },
+  "preparingPageApplication": { "message": "Preparing page image mapping…" },
+  "applyingPageImages": { "message": "Applying translated images $CURRENT$ / $TOTAL$", "placeholders": { "current": { "content": "$1" }, "total": { "content": "$2" } } },
+  "pageApplicationCompleted": { "message": "Translated images applied" },
+  "pageApplicationFailed": { "message": "Could not apply translated images. Reopen the workspace for details." },
+  "error_source_page_manifest_unavailable": { "message": "The saved chapter image manifest is unavailable. Applying an existing translation will not scroll the page automatically." },
+  "error_source_page_manifest_changed": { "message": "ComicCrawler's saved chapter manifest changed after this translation was created. The older translation was not applied automatically." },
+  "error_inline_application_in_progress": { "message": "Another page replacement is still running. Finish or restore it before applying a different revision." },
   "jobEventType_job_created": { "message": "Job created" },
   "jobEventType_job_queued": { "message": "Job queued" },
   "jobEventType_job_started": { "message": "Job started" },
@@ -315,7 +334,7 @@
   "error_current_tab_inaccessible": { "message": "The current tab is unavailable or is not an HTTP/HTTPS page." },
   "error_backend_health_unavailable": { "message": "The backend health response did not report ready." },
   "error_backend_not_ready": { "message": "The backend runtime is not ready." },
-  "error_koharu_not_ready": { "message": "Koharu is not running. Start it on the host, then check again." },
+  "error_manga_processor_not_ready": { "message": "The configured manga processor is not running. Start it on the host, then check again." },
   "error_no_images_selected": { "message": "Choose at least one source image." },
   "error_translation_target_incomplete": { "message": "Choose both a translation provider and model." },
   "error_crawler_source_unavailable": { "message": "The ComicCrawler image source is unavailable." },
@@ -336,14 +355,25 @@
   ,"error_comicCrawler_api": { "message": "ComicCrawler rejected the request. Check its service and authentication settings." }
   ,"error_comicCrawler_contract": { "message": "ComicCrawler returned an unsupported response." }
   ,"error_comicCrawler_unavailable": { "message": "ComicCrawler's chapter-image API is unavailable or did not finish in time. Generic page scanning is being used." }
-  ,"error_source_host_permission_required": { "message": "Image-source access is required. Open the extension popup, select “Allow image sources,” then translate again." }
+  ,"error_source_host_permission_required": { "message": "Image-source access is required. Grant access to continue the current translation flow." }
+  ,"sourceAccessWaiting": { "message": "Access to $1 image source(s) is required. After approval, the current image list and order will continue without running ComicCrawler again." }
+  ,"authorizeSourceAccessAndContinue": { "message": "Allow image sources and continue" }
+  ,"openingSourceAccess": { "message": "Opening access request…" }
+  ,"error_source_access_open_failed": { "message": "The image-source access screen could not be opened. Open the extension popup to approve it; the current scan is preserved." }
+  ,"error_source_access_request_expired": { "message": "The image-source access request expired. Review the current image list again." }
+  ,"error_source_access_page_mismatch": { "message": "The manga tab changed, so this access grant cannot continue the original translation flow." }
+  ,"error_source_access_notification_failed": { "message": "Access was granted, but the manga tab could not be notified. Return to that tab to continue without rescanning." }
   ,"warning_comicCrawler_network": { "message": "ComicCrawler could not be reached; using generic page scanning." }
   ,"warning_comicCrawler_api": { "message": "ComicCrawler rejected image discovery; using generic page scanning." }
   ,"warning_comicCrawler_contract": { "message": "ComicCrawler returned an unsupported response; using generic page scanning." }
   ,"warning_comicCrawler_unavailable": { "message": "ComicCrawler chapter-image detection is unavailable or did not finish in time; using generic page scanning." }
-  ,"warning_comicCrawler_timeout": { "message": "ComicCrawler chapter-image extraction exceeded 45 seconds, so generic page scanning is being used. Make sure the page is not waiting for verification, then retry." }
+  ,"warning_comicCrawler_timeout": { "message": "The ComicCrawler adapter capability check timed out; using generic page scanning." }
+  ,"warning_comicCrawler_browser_timeout": { "message": "ComicCrawler's incremental browser operation did not finish or keep progressing within its limit, so generic page scanning is being used. Keep the manga tab open and operable, then retry." }
   ,"warning_comicCrawler_verification_required": { "message": "ComicCrawler is waiting for site verification. Complete it in the current manga tab; image extraction will continue automatically once verified." }
   ,"warning_comicCrawler_browser_target_required": { "message": "ComicCrawler could not use the current tab. Keep the manga tab open and retry; Browser Client reconnects and registers it automatically in the background." }
+  ,"warning_comicCrawler_browser_protocol": { "message": "The extension and ComicCrawler use incompatible Browser Client protocol versions. Update both, then retry." }
+  ,"warning_comicCrawler_browser_enrollment": { "message": "The previous ComicCrawler Browser Client enrollment is no longer valid. The extension will enroll again automatically; retry once." }
+  ,"warning_comicCrawler_browser_connection": { "message": "The extension could not open the ComicCrawler Browser Client WebSocket. Check the ComicCrawler URL and network, then retry." }
   ,"warning_canvas_snapshot": { "message": "Canvas pages are snapshotted as PNG. A tainted canvas may fail to export." }
   ,"pageRevisionEyebrow": { "message": "PAGE CORRECTIONS" }
   ,"pageRevisionTitle": { "message": "Page translation versions" }
@@ -372,6 +402,9 @@
   ,"textRegionPageOption": { "message": "Page $1" }
   ,"textRegionShowBoxes": { "message": "Show detection boxes" }
   ,"textRegionShowText": { "message": "Show OCR text on image" }
+  ,"textRegionAdd": { "message": "Add OCR region" }
+  ,"textRegionCancelAdd": { "message": "Cancel adding region" }
+  ,"textRegionAddHelp": { "message": "Drag across the preview image to draw the missing OCR region." }
   ,"textRegionImageMode": { "message": "Preview image" }
   ,"textRegionOriginalImage": { "message": "Original" }
   ,"textRegionTranslatedImage": { "message": "Translated" }
@@ -388,6 +421,7 @@
   ,"textRegionImageLoading": { "message": "Loading translated page…" }
   ,"textRegionPreviewAlt": { "message": "Translated page $1 with text-region overlay" }
   ,"textRegionSelect": { "message": "Inspect text region $1" }
+  ,"textRegionSelectCreated": { "message": "Inspect newly added text region $1" }
   ,"textRegionListLabel": { "message": "Detected text regions" }
   ,"textRegionSourceText": { "message": "Exact OCR source text" }
   ,"textRegionTranslatedText": { "message": "Translated text" }
@@ -398,9 +432,30 @@
   ,"error_text_region_coordinate_space_unavailable": { "message": "The backend could not provide reliable image dimensions for this text-region snapshot." }
   ,"rootJobIdLabel": { "message": "Root Job ID" }
   ,"retranslationPageCountLabel": { "message": "Pages being corrected" }
+  ,"retranslationPagesLabel": { "message": "Pages selected for correction" }
+  ,"workspaceTabBackground": { "message": "Background jobs" }
+  ,"backgroundJobsEyebrow": { "message": "Chapter queue" }
+  ,"backgroundJobsTitle": { "message": "Background jobs" }
+  ,"backgroundJobsDescription": { "message": "Queued backend jobs continue after the browser closes and are reconciled when it reopens." }
+  ,"backgroundJobsEmpty": { "message": "There are no background jobs." }
+  ,"backgroundJobKind_selective_retranslation": { "message": "Page retranslation" }
+  ,"backgroundJobKind_text_region_correction": { "message": "OCR correction and retranslation" }
+  ,"backgroundJobKind_ocr_text_review": { "message": "AI OCR review" }
+  ,"backgroundJobPages": { "message": "Pages: $1" }
+  ,"backgroundJobRemove": { "message": "Remove from list" }
+  ,"backgroundJobPageLocked": { "message": "In progress" }
+  ,"backgroundJobPageLockedDescription": { "message": "This page already has a queued or running correction. Wait for the latest revision before editing it again." }
   ,"textRegionChangedCount": { "message": "$1 changed" }
   ,"textRegionChanged": { "message": "Edited region" }
   ,"textRegionChangedMark": { "message": "Edited" }
+  ,"textRegionExisting": { "message": "Existing OCR region" }
+  ,"textRegionNew": { "message": "New OCR region" }
+  ,"textRegionNewMark": { "message": "New" }
+  ,"textRegionDeleted": { "message": "Marked for deletion" }
+  ,"textRegionDeletedMark": { "message": "Delete" }
+  ,"textRegionDelete": { "message": "Delete region" }
+  ,"textRegionRestoreDeleted": { "message": "Restore region" }
+  ,"textRegionCancelCreated": { "message": "Remove new region" }
   ,"textRegionGeometry": { "message": "Detection-box geometry" }
   ,"textRegionGeometry_x": { "message": "X" }
   ,"textRegionGeometry_y": { "message": "Y" }
@@ -411,15 +466,77 @@
   ,"textRegionResizeHandle": { "message": "Resize selected text region" }
   ,"textRegionResetRegion": { "message": "Reset this region" }
   ,"textRegionResetAll": { "message": "Reset all changes" }
-  ,"textRegionInstructionsLabel": { "message": "Translation instructions (optional)" }
-  ,"textRegionInstructionsPlaceholder": { "message": "Example: Treat Intergalactic Empire as one term." }
-  ,"textRegionCorrectionHelp": { "message": "The correction job inherits the current translation service, model, and languages. Instructions are only supported by compatible providers." }
-  ,"textRegionBatchSummary": { "message": "$1 region(s) across $2 page(s) will be submitted." }
-  ,"textRegionSubmitCorrections": { "message": "Correct and retranslate $1 region(s)" }
+  ,"textRegionInstructionsLabel": { "message": "Retranslation prompt (optional)" }
+  ,"textRegionInstructionsPlaceholder": { "message": "Example: Keep Liam in English; use a formal tone." }
+  ,"textRegionCorrectionHelp": { "message": "This prompt is sent only to the final translation model. It does not affect OCR, AI correction, or text boxes. Leave it empty unless you need specific terminology or tone." }
+  ,"textRegionBatchSummary": { "message": "$1 operation(s) across $2 page(s) will be submitted." }
+  ,"textRegionSubmitCorrections": { "message": "Apply and retranslate $1 operation(s)" }
   ,"textRegionCorrectionCreating": { "message": "Queuing correction job…" }
   ,"textRegionReload": { "message": "Reload latest regions" }
+  ,"textRegionAiReviewStart": { "message": "AI semantically correct this page's OCR" }
+  ,"textRegionAiReviewRunning": { "message": "AI is reading and semantically correcting OCR text…" }
+  ,"textRegionAiReviewStopWaiting": { "message": "Stop waiting" }
+  ,"textRegionAiReviewCancel": { "message": "Cancel AI OCR review" }
+  ,"textRegionAiReviewCanceling": { "message": "Canceling AI OCR review…" }
+  ,"textRegionAiReviewFailureTokenLimit": { "message": "Correction failed for this field: the model exhausted its output budget before answering. The text below is the original OCR, not an AI suggestion." }
+  ,"textRegionAiReviewFailureGeneric": { "message": "Correction failed for this field. The text below is the original OCR, not an AI suggestion." }
+  ,"textRegionAiReviewPhase_preparing": { "message": "Preparing $2 OCR crop(s)…" }
+  ,"textRegionAiReviewPhase_uploading": { "message": "Uploading OCR crops: $3%" }
+  ,"textRegionAiReviewPhase_queued": { "message": "OCR review queued. Waiting for the backend…" }
+  ,"textRegionAiReviewPhase_running": { "message": "Corrected $1 of $2 OCR region(s) ($3%)." }
+  ,"textRegionAiReviewOriginalUnavailable": { "message": "The original page image is unavailable in this tab, so AI OCR review cannot create region crops." }
+  ,"textRegionAiReviewPartialFailure": { "message": "$1 of $2 OCR regions failed during AI review and kept their original OCR text. Inspect the OCR review Job events for details." }
+  ,"textRegionAiReviewTitle": { "message": "AI OCR suggestions" }
+  ,"textRegionAiReviewDescription": { "message": "The vision model reads the $1 existing OCR region(s) and suggests corrected text. Adopting suggestions only fills the main OCR editor; it does not start translation." }
+  ,"textRegionAiReviewRegion": { "message": "OCR region $1" }
+  ,"textRegionAiReviewOriginal": { "message": "Current OCR text" }
+  ,"textRegionAiReviewSuggested": { "message": "Suggested OCR text" }
+  ,"textRegionAiReviewDiscard": { "message": "Discard suggestions" }
+  ,"textRegionAiReviewApply": { "message": "Adopt suggestions into OCR fields" }
+  ,"textRegionAiReviewApplying": { "message": "Queuing AI-reviewed correction…" }
+  ,"textRegionAiReviewNeedsBoxes": { "message": "This page has no OCR regions. Add regions manually before asking AI to correct their text." }
+  ,"textRegionAiReviewManualConflict": { "message": "AI reviews the current region drafts, including newly created, moved, and resized regions. Adopting suggestions fills OCR text only and preserves region geometry." }
   ,"error_stale_region_set_revision": { "message": "These text regions have changed since they were loaded. Reload the latest regions and review your corrections again." }
-  ,"error_text_region_source_text_required": { "message": "Corrected OCR text cannot be empty." }
+  ,"error_text_region_source_text_required": { "message": "New or corrected OCR text cannot be empty." }
   ,"error_text_region_geometry_invalid": { "message": "Every coordinate must be a valid number; width and height must be greater than zero." }
   ,"error_text_region_geometry_out_of_bounds": { "message": "The detection box must stay inside the source image." }
+  ,"error_ocr_review_original_image_unavailable": { "message": "The original page image is unavailable for OCR review." }
+  ,"error_ocr_text_review_result_invalid": { "message": "The OCR review Job returned an invalid result." }
+  ,"error_ocr_text_review_all_items_failed": { "message": "The vision model could not correct any OCR regions. Inspect the Job events for per-region errors." }
+  ,"error_ocr_review_canvas_unavailable": { "message": "This browser cannot create OCR image crops." }
+  ,"error_ocr_review_crop_encoding_failed": { "message": "An OCR image crop could not be encoded." }
+  ,"chapterOcrBatchEyebrow": { "message": "Translation quality" }
+  ,"chapterOcrBatchTitle": { "message": "Whole-chapter AI OCR correction" }
+  ,"chapterOcrBatchDescription": { "message": "Correct every page with OCR, automatically adopt successful suggestions, then create one batch retranslation Job. Manually edited text is preserved." }
+  ,"chapterOcrBatchDetected": { "message": "OCR target pages: $1 / $2; $3 text region(s) detected." }
+  ,"chapterOcrBatchOriginalUnavailable": { "message": "The active tab cannot provide original images, so whole-chapter AI OCR correction is unavailable." }
+  ,"chapterOcrBatchNoRegions": { "message": "This translation Job has no OCR text regions available for AI correction." }
+  ,"chapterOcrBatchStart": { "message": "AI-correct chapter and batch retranslate" }
+  ,"chapterOcrBatchRunAgain": { "message": "AI-correct chapter again" }
+  ,"chapterOcrBatchCancel": { "message": "Cancel chapter correction" }
+  ,"chapterOcrBatchOpenOcr": { "message": "Open OCR inspection" }
+  ,"chapterOcrBatchOpenBackground": { "message": "View background jobs" }
+  ,"chapterOcrBatchStatus_preparing": { "message": "Preparing OCR crops for each page" }
+  ,"chapterOcrBatchStatus_reviewing": { "message": "AI is correcting chapter OCR" }
+  ,"chapterOcrBatchStatus_submitting": { "message": "Combining and adopting AI suggestions" }
+  ,"chapterOcrBatchStatus_translating": { "message": "Batch retranslation is queued in the background" }
+  ,"chapterOcrBatchStatus_succeeded": { "message": "Chapter AI correction and batch translation completed" }
+  ,"chapterOcrBatchStatus_failed": { "message": "Chapter AI correction did not complete" }
+  ,"chapterOcrBatchStatus_cancel_requested": { "message": "Canceling chapter work" }
+  ,"chapterOcrBatchStatus_canceled": { "message": "Chapter work canceled" }
+  ,"chapterOcrBatchPhase_preparing": { "message": "Prepared $1 of $2 page(s) ($3%)" }
+  ,"chapterOcrBatchPhase_reviewing": { "message": "Completed $1 of $2 AI OCR Job(s) ($3%)" }
+  ,"chapterOcrBatchPhase_submitting": { "message": "Creating the batch text-correction Job…" }
+  ,"chapterOcrBatchPhase_translating": { "message": "The backend is batch retranslating…" }
+  ,"chapterOcrBatchSucceeded": { "message": "AI-successful regions" }
+  ,"chapterOcrBatchChanged": { "message": "Changed regions adopted" }
+  ,"chapterOcrBatchFailed": { "message": "AI-failed regions" }
+  ,"chapterOcrBatchCorrectionPages": { "message": "Pages retranslated" }
+  ,"chapterOcrBatchUnchangedPages": { "message": "Pages with no suggested change" }
+  ,"chapterOcrBatchFailedPages": { "message": "Not retranslated after AI failure" }
+  ,"chapterOcrBatchUnchangedPageList": { "message": "AI matched the original OCR; no retranslation needed:" }
+  ,"chapterOcrBatchFailedPageList": { "message": "Not retranslated because AI review failed:" }
+  ,"chapterOcrBatchPartialFailurePageList": { "message": "Some regions failed, but other corrections were retranslated:" }
+  ,"showPageNumbersLabel": { "message": "Show image page numbers on the comic page" }
+  ,"pageNumberBadge": { "message": "Page $1" }
 }

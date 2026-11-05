@@ -1,13 +1,12 @@
 import {
   BrowserClientError,
-  ExistingTabExecutor,
-  WebExtensionTabDriver,
+  DriverBrowserExecutor,
+  ExistingTabAcquisitionStrategy,
   runBrowserExecutorContract,
   type BrowserClientConnection,
   type BrowserClientOptions,
   type BrowserClientState,
   type BrowserResourceDescriptor,
-  type WebExtensionApi,
 } from '@comiccrawler/browser-client-sdk';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
@@ -17,6 +16,7 @@ import { ComicCrawlerBrowserClientManager } from '../lib/comic-crawler/browser-c
 import { ComicCrawlerBrowserTaskCoordinator } from '../lib/comic-crawler/browser-task-coordinator';
 import { ChromeClientStateStore, type ExtensionStorageArea } from '../lib/comic-crawler/browser-state-store';
 import type { ChallengeDiscoveryJob, CrawlerTaskDetail, StoredBrowserTask } from '../lib/comic-crawler/types';
+import { WebExtensionTabDriver, type WebExtensionApi } from '../lib/comic-crawler/web-extension-tab-driver';
 
 class MemoryStorage implements ExtensionStorageArea {
   readonly values: Record<string, unknown> = {};
@@ -140,6 +140,29 @@ describe('ComicCrawlerBrowserClientManager', () => {
     expect(fake.client.connect).toHaveBeenCalledOnce();
     expect(fake.client.registerResource).toHaveBeenCalledOnce();
     expect(fake.client.revokeResource).not.toHaveBeenCalled();
+  });
+
+  it('replaces a stale SDK enrollment once before preparing the tab', async () => {
+    const storage = new MemoryStorage();
+    const store = new ChromeClientStateStore(storage);
+    const fake = fakeClientFactory(store);
+    const extension = fakeBrowser();
+    vi.stubGlobal('browser', extension.api);
+    await store.set(state);
+    fake.client.connect.mockRejectedValueOnce(new BrowserClientError(
+      'Browser Client credential is invalid.',
+      'INVALID_STATE',
+    ));
+    const manager = new ComicCrawlerBrowserClientManager(storage, store, fake.factory);
+
+    await expect(manager.prepareTab(settings, extension.tab)).resolves.toMatchObject({
+      status: 'connected',
+      workerId: 'worker-1',
+      resource: { tabId: 7, url: extension.tab.url },
+    });
+
+    expect(fake.client.connect).toHaveBeenCalledTimes(2);
+    expect(fake.client.enroll).toHaveBeenCalledOnce();
   });
 
   it('enrolls, reconnects, obtains a worker, and registers only the approved tab', async () => {
@@ -541,13 +564,19 @@ describe('WebExtension existing-tab executor contract', () => {
     extension.tab.url = initialUrl;
     extension.api.scripting.executeScript.mockImplementation(async (details: { func: (...args: unknown[]) => unknown }) => {
       const source = details.func.toString();
+      const name = details.func.name;
       if (source.includes('document.documentElement.outerHTML')) return [{ result: html }];
       if (source.includes('document.readyState')) return [{ result: true }];
+      if (name === 'countScrollPreparationCandidates') return [{ result: 1 }];
+      if (name === 'captureLoadedImageUrls') return [{ result: 1 }];
       return [{ result: undefined }];
     });
 
     const result = await runBrowserExecutorContract({
-      createExecutor: () => new ExistingTabExecutor(new WebExtensionTabDriver(extension.api as unknown as WebExtensionApi)),
+      createExecutor: () => {
+        const driver = new WebExtensionTabDriver(extension.api as unknown as WebExtensionApi);
+        return new DriverBrowserExecutor(driver, new ExistingTabAcquisitionStrategy(driver));
+      },
       request: {
         sessionId: 'session-1',
         leaseId: 'lease-1',

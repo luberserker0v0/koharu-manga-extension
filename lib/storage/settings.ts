@@ -2,10 +2,12 @@ import type { ApiSettings } from '../api/types';
 import { normalizeApiBaseUrl, normalizeServiceBaseUrl, originPermissionPattern, serviceOriginPermissionPattern } from '../api/url';
 
 const SETTINGS_KEY = 'backendSettings';
+export const UI_PREFERENCES_KEY = 'uiPreferences';
 
 export const DEFAULT_API_SETTINGS: ApiSettings = {
   baseUrl: 'http://127.0.0.1:4001/api/v1',
   token: '',
+  showPageNumbers: false,
   comicCrawler: {
     enabled: false,
     autoApplyPreviousTranslation: false,
@@ -17,10 +19,14 @@ export const DEFAULT_API_SETTINGS: ApiSettings = {
   },
 };
 
-function apiSettingsFromStored(value: Partial<ApiSettings> | undefined): ApiSettings {
+function apiSettingsFromStored(
+  value: Partial<ApiSettings> | undefined,
+  showPageNumbers = value?.showPageNumbers === true,
+): ApiSettings {
   return {
     baseUrl: value?.baseUrl || DEFAULT_API_SETTINGS.baseUrl,
     token: value?.token || '',
+    showPageNumbers,
     comicCrawler: {
       ...DEFAULT_API_SETTINGS.comicCrawler,
       ...(value?.comicCrawler ?? {}),
@@ -29,9 +35,10 @@ function apiSettingsFromStored(value: Partial<ApiSettings> | undefined): ApiSett
 }
 
 export async function readApiSettingsFromStorage(): Promise<ApiSettings> {
-  const stored = await browser.storage.local.get(SETTINGS_KEY);
+  const stored = await browser.storage.local.get([SETTINGS_KEY, UI_PREFERENCES_KEY]);
   const value = stored[SETTINGS_KEY] as Partial<ApiSettings> | undefined;
-  return apiSettingsFromStored(value);
+  const preferences = stored[UI_PREFERENCES_KEY] as { showPageNumbers?: unknown } | undefined;
+  return apiSettingsFromStored(value, preferences?.showPageNumbers === true);
 }
 
 export function apiSettingsForUntrustedContext(settings: ApiSettings): ApiSettings {
@@ -65,6 +72,7 @@ export async function saveApiSettings(settings: ApiSettings): Promise<ApiSetting
   const normalized: ApiSettings = {
     baseUrl: normalizeApiBaseUrl(settings.baseUrl),
     token: settings.token.trim(),
+    showPageNumbers: settings.showPageNumbers,
     comicCrawler: {
       enabled: settings.comicCrawler.enabled,
       autoApplyPreviousTranslation: settings.comicCrawler.autoApplyPreviousTranslation,
@@ -82,6 +90,30 @@ export async function saveApiSettings(settings: ApiSettings): Promise<ApiSetting
     const granted = await browser.permissions.request({ origins });
     if (!granted) throw new Error('host_permission_denied');
   }
-  await browser.storage.local.set({ [SETTINGS_KEY]: normalized });
+  const { showPageNumbers, ...backendSettings } = normalized;
+  await browser.storage.local.set({
+    [SETTINGS_KEY]: backendSettings,
+    [UI_PREFERENCES_KEY]: { showPageNumbers },
+  });
   return normalized;
+}
+
+export async function writePageNumberPreference(showPageNumbers: boolean): Promise<ApiSettings> {
+  const current = await readApiSettingsFromStorage();
+  const next = { ...current, showPageNumbers };
+  await browser.storage.local.set({ [UI_PREFERENCES_KEY]: { showPageNumbers } });
+  return next;
+}
+
+export async function savePageNumberPreference(showPageNumbers: boolean): Promise<ApiSettings> {
+  try {
+    return await writePageNumberPreference(showPageNumbers);
+  } catch {
+    const settings = await browser.runtime.sendMessage({
+      type: 'SET_SHOW_PAGE_NUMBERS',
+      showPageNumbers,
+    }) as ApiSettings | undefined;
+    if (!settings) throw new Error('settings_unavailable');
+    return apiSettingsFromStored(settings);
+  }
 }

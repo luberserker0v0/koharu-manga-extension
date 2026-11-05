@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorNotice } from '../../components/ErrorNotice';
+import { BackgroundJobsPanel } from '../../components/BackgroundJobsPanel';
+import { ChapterOcrBatchPanel } from '../../components/ChapterOcrBatchPanel';
 import { JobPanel } from '../../components/JobPanel';
 import { PageRevisionPanel } from '../../components/PageRevisionPanel';
 import { TextRegionInspectionPanel } from '../../components/TextRegionInspectionPanel';
@@ -10,6 +12,7 @@ import { PreflightReview } from '../../components/PreflightReview';
 import { SettingsPanel } from '../../components/SettingsPanel';
 import { TranslationForm } from '../../components/TranslationForm';
 import { useJobMonitor } from '../../hooks/useJobMonitor';
+import { useBackgroundJobs } from '../../hooks/useBackgroundJobs';
 import { useSettings } from '../../hooks/useSettings';
 import { useTranslationWorkflow } from '../../hooks/useTranslationWorkflow';
 import { BackendClient } from '../../lib/api/backend-client';
@@ -17,11 +20,14 @@ import type { PageRevisionManifest } from '../../lib/api/types';
 import { ComicCrawlerClient } from '../../lib/comic-crawler/client';
 import { dataUrlToBlob } from '../../lib/data-url';
 import { t } from '../../lib/i18n';
+import { isTerminalJobStatus } from '../../lib/domain/job-state';
+import { chapterOcrBatchIsActive } from '../../lib/text-regions/chapter-ocr-batch';
+import { sourcePageReferencesForWorkflow } from '../../lib/page-images/workflow-mapping';
 import { pageWorkflowKey } from '../../lib/storage/workflow';
 
 export function App() {
   const scrollContainerRef = useRef<HTMLElement>(null);
-  const { settings, save } = useSettings();
+  const { settings, save, setShowPageNumbers } = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activePage, setActivePage] = useState<{ resolved: boolean; tabId?: number; url?: string }>({ resolved: false });
   const [activePageApplied, setActivePageApplied] = useState(false);
@@ -33,7 +39,21 @@ export function App() {
   const [crawlerCheck, setCrawlerCheck] = useState<'idle' | 'checking' | 'ready' | 'unavailable'>('idle');
   const scopedClient = activePage.resolved ? client : null;
   const workflow = useTranslationWorkflow(scopedClient, activePage.url);
+  const sourceImagePages = useMemo(
+    () => sourcePageReferencesForWorkflow(workflow.workflow),
+    [workflow.workflow],
+  );
   const monitor = useJobMonitor(scopedClient, workflow.workflow?.jobId ?? null, workflow.discardMissingJob);
+  const backgroundTasks = workflow.workflow?.backgroundTasks ?? [];
+  useBackgroundJobs(scopedClient, backgroundTasks, workflow.reconcileBackgroundJob);
+  const lockedSourceImageIds = useMemo(() => [...new Set([
+    ...backgroundTasks
+      .filter((task) => task.kind !== 'ocr_text_review' && !isTerminalJobStatus(task.status))
+      .flatMap((task) => task.sourceImageIds),
+    ...(chapterOcrBatchIsActive(workflow.workflow?.chapterOcrBatch)
+      ? sourceImagePages.map((page) => page.sourceImageId)
+      : []),
+  ])], [backgroundTasks, sourceImagePages, workflow.workflow?.chapterOcrBatch]);
   const checkedClient = useRef<BackendClient | null>(null);
 
   useEffect(() => {
@@ -144,6 +164,11 @@ export function App() {
       });
       response = await request();
     }
+    for (let attempt = 0; response?.error === 'source_page_mapping_incomplete' && attempt < 4; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      response = await request();
+    }
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     if (!response?.ok || !response.dataUrl) throw new Error(response?.error || 'page_image_fetch_failed');
     return dataUrlToBlob(response.dataUrl);
@@ -195,7 +220,8 @@ export function App() {
     return <main className="app-shell loading-shell"><div className="spinner" /><span>{t('loadingExtension')}</span></main>;
   }
 
-  const connectionState = workflow.runtime?.backend.status === 'ready' && workflow.runtime?.koharu.status === 'running';
+  const connectionState = workflow.runtime?.backend.status === 'ready'
+    && workflow.runtime?.mangaProcessor.status === 'running';
 
   return (
     <main className="app-shell" ref={scrollContainerRef}>
@@ -253,23 +279,44 @@ export function App() {
               monitorError={monitor.monitorError}
               sourcePageUrl={workflow.workflow.sourcePageUrl}
               selectedImageCount={workflow.workflow.fileNames.length}
-              autoApplyInline={false}
+              sourceImagePages={sourceImagePages}
+              autoApplyInline={!workflow.restored}
               pageApplied={activePageApplied}
+              showPageNumbers={settings.showPageNumbers}
               canRequeue={Boolean(workflow.workflow.preflightId)}
               requeueBusy={workflow.phase === 'checking'}
               onReset={() => void workflow.reset()}
               onDiscardMissingJob={() => void workflow.discardMissingJob()}
               onJobReplaced={(jobId) => void workflow.replaceJob(jobId)}
               onRequeue={() => void workflow.requeueFromPreflight()}
-              onApplyJob={activePage.url && !monitor.job?.revision ? applyToActivePage : undefined}
+              onApplyJob={activePage.url ? applyToActivePage : undefined}
               onRestoreInline={activePage.url ? restoreActivePage : undefined}
               onPageAppliedChange={setActivePageApplied}
+              onShowPageNumbersChange={setShowPageNumbers}
+              qualityImprovementPanel={monitor.job?.status === 'succeeded' ? ({ openOcr, openBackground }) => (
+                <ChapterOcrBatchPanel
+                  client={client}
+                  jobId={monitor.job!.id}
+                  batch={workflow.workflow?.chapterOcrBatch}
+                  workspace={workflow.workflow?.textRegionWorkspace}
+                  backgroundTasks={backgroundTasks}
+                  loadOriginalImage={activePage.url ? loadOriginalFromActivePage : undefined}
+                  onBatchChange={(batch) => workflow.saveChapterOcrBatch(batch)}
+                  onBackgroundJob={(job, kind, sourceImageIds) => workflow.addBackgroundJob(job, kind, sourceImageIds)}
+                  onOpenOcr={openOcr}
+                  onOpenBackground={openBackground}
+                />
+              ) : undefined}
               textRegionPanel={monitor.job?.status === 'succeeded' ? (
                 <TextRegionInspectionPanel
                   client={client}
                   jobId={monitor.job.id}
                   loadOriginalImage={activePage.url ? loadOriginalFromActivePage : undefined}
-                  onJobCreated={(job) => void workflow.replaceJob(job.id, job.revision?.rootJobId, job.revision?.parentJobId)}
+                  lockedSourceImageIds={lockedSourceImageIds}
+                  storedWorkspace={workflow.workflow.textRegionWorkspace}
+                  onWorkspaceChange={(workspace) => void workflow.saveTextRegionWorkspace(workspace)}
+                  onReviewJobCreated={(job, sourceImageIds) => void workflow.addBackgroundJob(job, 'ocr_text_review', sourceImageIds)}
+                  onJobCreated={(job, sourceImageIds) => void workflow.addBackgroundJob(job, 'text_region_correction', sourceImageIds)}
                 />
               ) : undefined}
               pageRevisionPanel={monitor.job?.status === 'succeeded' ? (
@@ -278,10 +325,20 @@ export function App() {
                   rootJobId={monitor.job.revision?.rootJobId ?? workflow.workflow.rootJobId ?? monitor.job.id}
                   parentJobId={monitor.job.id}
                   currentJob={monitor.job}
-                  onJobCreated={(job) => void workflow.replaceJob(job.id, job.revision?.rootJobId, job.revision?.parentJobId)}
+                  lockedSourceImageIds={lockedSourceImageIds}
+                  onJobCreated={(job, sourceImageIds) => void workflow.addBackgroundJob(job, 'selective_retranslation', sourceImageIds)}
                   onApplied={activePage.url ? applyRevisionsToActivePage : undefined}
                 />
               ) : undefined}
+              backgroundTaskCount={backgroundTasks.length}
+              backgroundJobsPanel={(
+                <BackgroundJobsPanel
+                  client={client}
+                  tasks={backgroundTasks}
+                  sourceImagePages={sourceImagePages}
+                  onRemove={(jobId) => workflow.removeBackgroundTask(jobId)}
+                />
+              )}
               />
             </div>
           ) : workflow.preflight ? (

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { buildQuickTranslationRequest, createQuickIdentifiers } from '../lib/domain/translation-request';
+import { buildQuickTranslationRequest, createQuickIdentifiers, sourceLanguageList } from '../lib/domain/translation-request';
 
 describe('browser-safe translation request', () => {
+  it('restores legacy source-language strings and preserves ordered combinations', () => {
+    expect(sourceLanguageList('en')).toEqual(['en']);
+    expect(sourceLanguageList(['en', 'ja', 'en'])).toEqual(['en', 'ja']);
+    expect(sourceLanguageList(null)).toEqual([]);
+  });
+
   it('uses source preflight and never sends outputDir', () => {
     const request = buildQuickTranslationRequest({
       translationMode: 'quick',
       targetLanguage: 'zh-TW',
-      sourceLanguage: 'ja',
+      sourceLanguage: ['en', 'ja'],
       exportFormat: 'rendered',
       mangaId: 'my_manga',
       translatorId: 'quick_output',
@@ -22,13 +28,14 @@ describe('browser-safe translation request', () => {
       translatorId: 'quick_output',
       chapterId: 'ch_001',
       translationTarget: { providerId: 'deepl', modelId: 'mt' },
+      sourceLanguage: ['en', 'ja'],
     });
     expect(request).not.toHaveProperty('outputDir');
   });
 
   it('omits translationTarget when using the backend default', () => {
     const request = buildQuickTranslationRequest({
-      translationMode: 'quick', targetLanguage: 'zh-TW', sourceLanguage: '', exportFormat: 'rendered',
+      translationMode: 'quick', targetLanguage: 'zh-TW', sourceLanguage: [], exportFormat: 'rendered',
       mangaId: 'manga', translatorId: 'quick_output', chapterId: 'chapter',
       translationProviderId: '', translationModelId: '',
     }, 'preflight-1');
@@ -57,7 +64,7 @@ describe('browser-safe translation request', () => {
 
   it('normalizes identifiers again when creating the backend request', () => {
     const request = buildQuickTranslationRequest({
-      translationMode: 'quick', targetLanguage: 'zh-TW', sourceLanguage: '', exportFormat: 'rendered',
+      translationMode: 'quick', targetLanguage: 'zh-TW', sourceLanguage: [], exportFormat: 'rendered',
       mangaId: 'Quick-Manga-01', translatorId: 'Quick Output', chapterId: 'Chapter-01',
       translationProviderId: '', translationModelId: '',
     }, 'preflight-1');

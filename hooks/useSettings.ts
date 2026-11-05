@@ -1,17 +1,35 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiSettings } from '../lib/api/types';
-import { DEFAULT_API_SETTINGS, loadApiSettings, saveApiSettings } from '../lib/storage/settings';
+import { DEFAULT_API_SETTINGS, loadApiSettings, saveApiSettings, savePageNumberPreference } from '../lib/storage/settings';
 
 export function useSettings() {
   const [settings, setSettings] = useState<ApiSettings | null>(null);
 
   useEffect(() => {
-    void loadApiSettings()
-      .then(setSettings)
-      .catch(() => setSettings({
-        ...DEFAULT_API_SETTINGS,
-        comicCrawler: { ...DEFAULT_API_SETTINGS.comicCrawler },
-      }));
+    let active = true;
+    const refresh = () => {
+      void loadApiSettings()
+        .then((next) => { if (active) setSettings(next); })
+        .catch(() => {
+          if (active) {
+            setSettings({
+              ...DEFAULT_API_SETTINGS,
+              comicCrawler: { ...DEFAULT_API_SETTINGS.comicCrawler },
+            });
+          }
+        });
+    };
+    const listener = (message: unknown) => {
+      if (!message || typeof message !== 'object' || !('type' in message)
+        || message.type !== 'API_SETTINGS_CHANGED') return;
+      refresh();
+    };
+    browser.runtime.onMessage.addListener(listener);
+    refresh();
+    return () => {
+      active = false;
+      browser.runtime.onMessage.removeListener(listener);
+    };
   }, []);
 
   const save = useCallback(async (next: ApiSettings) => {
@@ -19,5 +37,10 @@ export function useSettings() {
     setSettings(saved);
   }, []);
 
-  return { settings, save };
+  const setShowPageNumbers = useCallback(async (showPageNumbers: boolean) => {
+    const saved = await savePageNumberPreference(showPageNumbers);
+    setSettings(saved);
+  }, []);
+
+  return { settings, save, setShowPageNumbers };
 }

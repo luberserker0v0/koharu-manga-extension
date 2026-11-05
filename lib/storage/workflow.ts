@@ -1,9 +1,12 @@
+import type { StoredBackgroundTask, StoredTextRegionWorkspace } from '../text-regions/workspace';
+import type { StoredChapterOcrBatch } from '../text-regions/chapter-ocr-batch';
+
 export interface StoredBindings {
   mangaId: string;
   translatorId: string;
   chapterId: string;
   targetLanguage: string;
-  sourceLanguage: string;
+  sourceLanguage: string | string[];
   exportFormat: string;
   translationProviderId?: string;
   translationModelId?: string;
@@ -16,6 +19,9 @@ export interface StoredWorkflow {
   jobId?: string;
   rootJobId?: string;
   parentJobId?: string;
+  backgroundTasks?: StoredBackgroundTask[];
+  textRegionWorkspace?: StoredTextRegionWorkspace;
+  chapterOcrBatch?: StoredChapterOcrBatch;
   fileNames: string[];
   sourceImages?: Array<{
     sourceImageId: string;
@@ -29,11 +35,13 @@ export interface StoredWorkflow {
     chapterUrl: string;
     chapterId?: string;
     canonicalUrl?: string;
+    manifestRevision?: string;
     pages?: Array<{
       pageId: string;
       sourceOrderIndex: number;
       uploadOrder: number;
       fileName: string;
+      sourceUrl?: string;
       sourceImageId?: string;
       sourceFingerprint?: string;
     }>;

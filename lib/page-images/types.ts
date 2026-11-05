@@ -47,6 +47,7 @@ export interface DetectionResult {
 
 export interface DetectionOptions {
   deep?: boolean;
+  preserveDuplicateUrls?: boolean;
   resolveOnly?: boolean;
   timeoutMs?: number;
   renderContext?: {

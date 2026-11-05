@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GenericDomImageDetector, type GenericDetectorLimits } from '../lib/page-images/generic-dom-detector';
+import { findCandidateTargets, GenericDomImageDetector, type GenericDetectorLimits } from '../lib/page-images/generic-dom-detector';
 
 const limits: GenericDetectorLimits = {
   maxViewportAdvances: 3,
@@ -45,6 +45,32 @@ describe('GenericDomImageDetector', () => {
     const result = await new GenericDomImageDetector(limits).detect(location.href);
     expect(result.images).toHaveLength(1);
     expect(result.images[0]?.width).toBe(1200);
+  });
+
+  it('preserves duplicate DOM occurrences for authoritative manifest page resolution', async () => {
+    document.body.append(
+      mangaImage('https://cdn.test/reused-page.jpg'),
+      mangaImage('https://cdn.test/reused-page.jpg'),
+    );
+    const result = await new GenericDomImageDetector(limits).detect(location.href, {
+      preserveDuplicateUrls: true,
+    });
+    expect(result.images).toHaveLength(2);
+    expect(new Set(result.images.map((image) => image.id)).size).toBe(2);
+  });
+
+  it('resolves a large page-number candidate set in one bulk mapping operation', async () => {
+    const images = Array.from({ length: 100 }, (_, index) => mangaImage(`https://cdn.test/page-${index + 1}.jpg`));
+    document.body.append(...images);
+    const result = await new GenericDomImageDetector({ ...limits, maxCandidates: 100 }).detect(location.href, {
+      preserveDuplicateUrls: true,
+    });
+
+    const resolved = findCandidateTargets(result.images);
+
+    expect(resolved.size).toBe(100);
+    expect(resolved.get(result.images[0]!.id)).toBe(images[0]);
+    expect(resolved.get(result.images[99]!.id)).toBe(images[99]);
   });
 
   it('restores the original scroll position after a deep scan', async () => {

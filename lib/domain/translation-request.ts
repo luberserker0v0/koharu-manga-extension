@@ -5,7 +5,7 @@ export interface TranslationFormValues {
   translatorId: string;
   chapterId: string;
   targetLanguage: string;
-  sourceLanguage: string;
+  sourceLanguage: string[];
   exportFormat: ExportFormat;
   translationMode: TranslationMode;
   translationProviderId: string;
@@ -53,6 +53,11 @@ export function buildQuickTranslationRequest(
     translatorId: normalizeApiIdentifier(values.translatorId),
     chapterId: normalizeApiIdentifier(values.chapterId),
     sourcePreflightId,
-    ...(values.sourceLanguage.trim() ? { sourceLanguage: values.sourceLanguage.trim() } : {}),
+    ...(values.sourceLanguage.length ? { sourceLanguage: values.sourceLanguage } : {}),
   };
+}
+
+export function sourceLanguageList(value: string | string[] | null | undefined): string[] {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
 }

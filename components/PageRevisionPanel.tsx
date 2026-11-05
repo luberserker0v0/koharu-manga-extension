@@ -11,13 +11,15 @@ export function PageRevisionPanel({
   currentJob,
   onJobCreated,
   onApplied,
+  lockedSourceImageIds = [],
 }: {
   client: BackendClient;
   rootJobId: string;
   parentJobId: string;
   currentJob: JobResource;
-  onJobCreated: (job: JobResource) => void;
+  onJobCreated: (job: JobResource, sourceImageIds: string[]) => void;
   onApplied?: (manifest: PageRevisionManifest) => Promise<void>;
+  lockedSourceImageIds?: string[];
 }) {
   const [manifest, setManifest] = useState<PageRevisionManifest | null>(null);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
@@ -74,11 +76,13 @@ export function PageRevisionPanel({
         sourceImageIds: [...selectedPages],
         ...(text ? { instructions: text } : {}),
       });
-      onJobCreated(job);
+      const submitted = [...selectedPages];
+      setSelectedPages(new Set());
+      setInstructions('');
+      onJobCreated(job, submitted);
     } catch (nextError) {
       setError(nextError);
-      setBusy(null);
-    }
+    } finally { setBusy(null); }
   };
 
   const activate = async () => {
@@ -131,6 +135,7 @@ export function PageRevisionPanel({
             {manifest.pages.map((page) => {
               const chosenId = selectedRevisions[page.sourceImageId] ?? page.activeRevisionId ?? '';
               const chosen = page.revisions.find((revision) => revision.revisionId === chosenId);
+              const locked = lockedSourceImageIds.includes(page.sourceImageId);
               return (
                 <li key={page.sourceImageId}>
                   <div className="revision-page-heading">
@@ -138,6 +143,7 @@ export function PageRevisionPanel({
                       <input
                         type="checkbox"
                         checked={selectedPages.has(page.sourceImageId)}
+                        disabled={locked}
                         onChange={(event) => setSelectedPages((current) => {
                           const next = new Set(current);
                           if (event.target.checked) next.add(page.sourceImageId); else next.delete(page.sourceImageId);
@@ -145,6 +151,7 @@ export function PageRevisionPanel({
                         })}
                       />
                       <span>{t('pageRevisionPage', String(page.sourceOrderIndex + 1))}</span>
+                      {locked && <small>{t('backgroundJobPageLocked')}</small>}
                     </label>
                     <small title={page.sourceFileName}>{page.sourceFileName || page.sourceImageId}</small>
                   </div>

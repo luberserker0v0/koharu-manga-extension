@@ -1,6 +1,6 @@
 {
   "name": "koharu-manga-companion",
-  "version": "0.1.1",
+  "version": "0.1.18",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:edge": "wxt build -b edge",
+    "package:edge-android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-edge-android.ps1",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
@@ -16,7 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@comiccrawler/browser-client-sdk": "https://github.com/luberserker0v0/comic-crawler/releases/download/v0.2.0/comiccrawler-browser-client-sdk-0.2.0.tgz",
+    "@comiccrawler/browser-client-sdk": "https://github.com/luberserker0v0/comic-crawler/releases/download/v0.5.0/comiccrawler-browser-client-sdk-0.5.0.tgz",
     "@wxt-dev/module-react": "^1.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

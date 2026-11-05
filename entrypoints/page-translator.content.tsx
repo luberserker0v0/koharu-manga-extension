@@ -1,14 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { PageTranslatorApp } from '../components/PageTranslatorApp';
-import { BackendClient } from '../lib/api/backend-client';
-import { orderedTranslatedImages } from '../lib/artifacts/translated-images';
 import type { PageDomBridge } from '../lib/page-images/bridge';
-import { findCandidateElement, findCandidateTarget, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
+import { findCandidateElement, findCandidateTarget, findCandidateTargets, GenericDomImageDetector } from '../lib/page-images/generic-dom-detector';
 import { isDocumentFullscreen } from '../lib/page-images/fullscreen';
-import { candidatesForStoredWorkflow } from '../lib/page-images/workflow-mapping';
-import { loadApiSettings } from '../lib/storage/settings';
-import { loadWorkflow } from '../lib/storage/workflow';
+import { PageNumberOverlay } from '../lib/page-images/page-number-overlay';
 import { optionalMessage } from '../lib/i18n';
 import { isExtensionContextInvalidated } from '../lib/extension-context';
 import './popup/style.css';
@@ -28,6 +24,7 @@ export default defineContentScript({
     pageWindow.__koharuMangaCompanionMounted__ = true;
 
     const detector = new GenericDomImageDetector();
+    const pageNumberOverlay = new PageNumberOverlay(findCandidateTargets);
     type SavedState =
       | { kind: 'img'; src: string; srcset: string; sizes: string }
       | { kind: 'canvas'; dataUrl: string | null }
@@ -53,7 +50,11 @@ export default defineContentScript({
     });
 
     const bridge: PageDomBridge = {
-      detect: (deep, signal) => detector.detect(location.href, { deep, signal }),
+      detect: (deep, signal, preserveDuplicateUrls) => detector.detect(location.href, {
+        deep,
+        signal,
+        preserveDuplicateUrls,
+      }),
       async apply(candidate, url) {
         const target = findCandidateTarget(candidate) ?? findCandidateElement(candidate);
         if (!target) return false;
@@ -163,64 +164,13 @@ export default defineContentScript({
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
         return new File([buffer], candidate.fileName, { type: 'image/png' });
       },
+      async setPageNumberLabels(entries) {
+        pageNumberOverlay.set(entries);
+      },
       async setLayout() {
         // The modal ShadowRoot container always covers the viewport; its root
         // disables pointer events while the FAB and drawer opt back in.
       },
-    };
-
-    const applyTranslatedImages = async (urls: string[]) => {
-      const detected = await detector.detect(location.href, { deep: true });
-      const candidates = detected.images.filter((image) => image.selected && image.loadStatus === 'loaded');
-      if (urls.length !== candidates.length) throw new Error('artifact_image_count_mismatch');
-      for (let index = 0; index < candidates.length; index += 1) {
-        if (!await bridge.apply(candidates[index]!, urls[index]!)) {
-          await bridge.restore();
-          throw new Error('inline_replacement_incomplete');
-        }
-      }
-    };
-
-    const mapCurrentCandidates = async (sourceImageIds: string[]) => {
-      const saved = await loadWorkflow(location.href);
-      if (!saved) throw new Error('source_page_mapping_incomplete');
-      const detected = await detector.detect(location.href, { deep: true });
-      const candidates = candidatesForStoredWorkflow(detected.images, saved);
-      const sourceImages = [...(saved.sourceImages ?? [])].sort((left, right) => left.uploadOrder - right.uploadOrder);
-      if (sourceImages.length !== candidates.length || sourceImages.length !== sourceImageIds.length) {
-        throw new Error('source_page_mapping_incomplete');
-      }
-      const candidateBySourceId = new Map(sourceImages.map((source, index) => [source.sourceImageId, candidates[index]]));
-      return sourceImageIds.map((sourceImageId) => {
-        const candidate = candidateBySourceId.get(sourceImageId);
-        if (!candidate) throw new Error('source_page_mapping_incomplete');
-        return candidate;
-      });
-    };
-
-    const applyMappedImages = async (pages: Array<{ sourceImageId: string; url: string }>) => {
-      const candidates = await mapCurrentCandidates(pages.map((page) => page.sourceImageId));
-      for (let index = 0; index < candidates.length; index += 1) {
-        if (!await bridge.apply(candidates[index]!, pages[index]!.url)) {
-          await bridge.restore();
-          throw new Error('inline_replacement_incomplete');
-        }
-      }
-    };
-
-    const applyTranslationJob = async (jobId: string, expectedCount: number) => {
-      const client = new BackendClient(await loadApiSettings(), { useBackgroundProxy: true });
-      const manifest = await client.getTranslatedImages(jobId);
-      const images = orderedTranslatedImages(manifest, expectedCount);
-      const blobs = await Promise.all(images.map((image) => client.downloadTranslatedImage(jobId, image)));
-      const urls = await Promise.all(blobs.map((blob) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.addEventListener('load', () => resolve(String(reader.result)));
-        reader.addEventListener('error', () => reject(reader.error ?? new Error('artifact_read_failed')));
-        reader.readAsDataURL(blob);
-      })));
-      await applyMappedImages(images.map((image, index) => ({ sourceImageId: image.sourceImageId, url: urls[index]! })));
-      return urls.length;
     };
 
     const runtimeListener = (message: unknown) => {
@@ -230,37 +180,7 @@ export default defineContentScript({
         return Promise.resolve({ ok: true, applied: replacements.size > 0, count: replacements.size });
       }
       if (message.type === 'RESTORE_PAGE_IMAGES') return bridge.restore().then(() => ({ ok: true }));
-      if (message.type === 'APPLY_TRANSLATION_JOB') {
-        const jobId = 'jobId' in message && typeof message.jobId === 'string' ? message.jobId : '';
-        const expectedCount = 'expectedCount' in message && typeof message.expectedCount === 'number' ? message.expectedCount : 0;
-        return applyTranslationJob(jobId, expectedCount)
-          .then((applied) => ({ ok: true, applied }))
-          .catch((error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : 'inline_replacement_incomplete' }));
-      }
-      if (message.type === 'APPLY_PAGE_REVISIONS') {
-        const pages = 'pages' in message && Array.isArray(message.pages)
-          ? message.pages.flatMap((page): Array<{ sourceImageId: string; url: string }> => {
-              if (!page || typeof page !== 'object') return [];
-              const value = page as { sourceImageId?: unknown; url?: unknown };
-              return typeof value.sourceImageId === 'string' && typeof value.url === 'string'
-                ? [{ sourceImageId: value.sourceImageId, url: value.url }]
-                : [];
-            })
-          : [];
-        if (!pages.length || new Set(pages.map((page) => page.sourceImageId)).size !== pages.length) {
-          return Promise.resolve({ ok: false, error: 'source_page_mapping_incomplete' });
-        }
-        return applyMappedImages(pages)
-          .then(() => ({ ok: true, applied: pages.length }))
-          .catch((error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : 'inline_replacement_incomplete' }));
-      }
-      if (message.type !== 'APPLY_TRANSLATED_IMAGES') return undefined;
-      const urls = 'urls' in message && Array.isArray(message.urls)
-        ? message.urls.filter((url): url is string => typeof url === 'string')
-        : [];
-      return applyTranslatedImages(urls)
-        .then(() => ({ ok: true, applied: urls.length }))
-        .catch((error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : 'inline_replacement_incomplete' }));
+      return undefined;
     };
     browser.runtime.onMessage.addListener(runtimeListener);
 
@@ -308,11 +228,13 @@ export default defineContentScript({
       ui.mount();
       ctx.onInvalidated(() => {
         try { browser.runtime.onMessage.removeListener(runtimeListener); } catch { /* invalidated */ }
+        pageNumberOverlay.destroy();
         ui.remove();
         pageWindow.__koharuMangaCompanionMounted__ = false;
       });
     } catch (error) {
       try { browser.runtime.onMessage.removeListener(runtimeListener); } catch { /* invalidated */ }
+      pageNumberOverlay.destroy();
       pageWindow.__koharuMangaCompanionMounted__ = false;
       if (isExtensionContextInvalidated(error)) return;
       window.removeEventListener('unhandledrejection', suppressInvalidatedRejection);

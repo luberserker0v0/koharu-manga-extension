@@ -6,6 +6,8 @@ export const WAITING_JOB_STATES = new Set([
   'waiting_dependency',
   'waiting_pipeline',
   'waiting_prerequisite',
+  'waiting_manga_processor_review',
+  // Old persisted Jobs can still report the pre-provider-neutral stage name.
   'waiting_koharu_review',
 ]);
 

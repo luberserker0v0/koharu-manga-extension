@@ -8,6 +8,7 @@ import { firstFailedChild, normalizeJobState } from '../lib/domain/job-state';
 import { presentJobEvent } from '../lib/domain/job-event';
 import { durationParts, jobDurationMilliseconds } from '../lib/domain/job-duration';
 import { formatLocalDate, optionalMessage, t } from '../lib/i18n';
+import type { StoredSourcePageReference } from '../lib/page-images/workflow-mapping';
 import { ErrorNotice } from './ErrorNotice';
 import { StatusPill } from './StatusPill';
 
@@ -21,6 +22,28 @@ function Diagnostics({ value }: { value: Record<string, unknown> | null | undefi
   );
 }
 
+function OcrLanguageResolution({ value }: { value: unknown }) {
+  if (!value || typeof value !== 'object') return null;
+  const resolution = value as Record<string, unknown>;
+  const engineId = typeof resolution.engineId === 'string' ? resolution.engineId : null;
+  const requested = Array.isArray(resolution.requestedSourceLanguages)
+    ? resolution.requestedSourceLanguages.filter((item): item is string => typeof item === 'string')
+    : [];
+  if (!engineId) return null;
+  const warnings = Array.isArray(resolution.warnings)
+    ? resolution.warnings.filter((item): item is string => typeof item === 'string')
+    : [];
+  return (
+    <div className="notice notice-neutral ocr-language-resolution">
+      <strong>{t('ocrLanguageResolutionTitle')}</strong>
+      <span>{t('ocrLanguageEngineDetail', engineId)}</span>
+      <span>{t('ocrLanguageSourceDetail', requested.length ? requested.join(' → ') : t('sourceLanguageAutomatic'))}</span>
+      {requested.length > 0 && resolution.hintsApplied === false && <span>{t('ocrLanguageHintsNotApplied')}</span>}
+      {warnings.map((warning) => <span key={warning}>{warning}</span>)}
+    </div>
+  );
+}
+
 function formatJobDuration(milliseconds: number | null): string {
   if (milliseconds === null) return t('notAvailable');
   const duration = durationParts(milliseconds);
@@ -29,9 +52,10 @@ function formatJobDuration(milliseconds: number | null): string {
   return t('durationSeconds', String(duration.seconds));
 }
 
-type WorkspaceTab = 'job' | 'artifacts' | 'events' | 'ocr' | 'revisions';
+type WorkspaceTab = 'job' | 'artifacts' | 'events' | 'ocr' | 'revisions' | 'background';
+const EVENT_PAGE_SIZE = 50;
 
-export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, sourcePageUrl, selectedImageCount, autoApplyInline = true, pageApplied = false, canRequeue = false, requeueBusy = false, onReset, onDiscardMissingJob, onJobReplaced, onRequeue, onApplyInline, onApplyJob, onRestoreInline, onPageAppliedChange, textRegionPanel, pageRevisionPanel }: {
+export function JobPanel({ client, jobId, job, events, artifacts, transport, monitorError, sourcePageUrl, selectedImageCount, sourceImagePages = [], autoApplyInline = true, pageApplied = false, showPageNumbers = false, canRequeue = false, requeueBusy = false, onReset, onDiscardMissingJob, onJobReplaced, onRequeue, onApplyInline, onApplyJob, onRestoreInline, onPageAppliedChange, onShowPageNumbersChange, qualityImprovementPanel, textRegionPanel, pageRevisionPanel, backgroundJobsPanel, backgroundTaskCount = 0 }: {
   client: BackendClient;
   jobId: string;
   job: JobResource | null;
@@ -41,8 +65,10 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   monitorError: unknown;
   sourcePageUrl?: string;
   selectedImageCount?: number;
+  sourceImagePages?: StoredSourcePageReference[];
   autoApplyInline?: boolean;
   pageApplied?: boolean;
+  showPageNumbers?: boolean;
   canRequeue?: boolean;
   requeueBusy?: boolean;
   onReset: () => void;
@@ -53,8 +79,12 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   onApplyJob?: (jobId: string) => Promise<boolean>;
   onRestoreInline?: () => void | Promise<void>;
   onPageAppliedChange?: (applied: boolean) => void;
+  onShowPageNumbersChange?: (show: boolean) => void | Promise<void>;
+  qualityImprovementPanel?: (actions: { openOcr: () => void; openBackground: () => void }) => ReactNode;
   textRegionPanel?: ReactNode;
   pageRevisionPanel?: ReactNode;
+  backgroundJobsPanel?: ReactNode;
+  backgroundTaskCount?: number;
 }) {
   const [actionError, setActionError] = useState<unknown>(null);
   const [canceling, setCanceling] = useState(false);
@@ -63,13 +93,16 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   const [jobAction, setJobAction] = useState<'retry' | 'resume' | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('job');
+  const [visibleEventCount, setVisibleEventCount] = useState(EVENT_PAGE_SIZE);
   const automaticInlineAttempt = useRef<string | null>(null);
   const artifactCache = useRef(new Map<number, DownloadedArtifact>());
   useEffect(() => { artifactCache.current.clear(); }, [jobId]);
+  useEffect(() => { setVisibleEventCount(EVENT_PAGE_SIZE); }, [jobId]);
   useEffect(() => {
     if (activeTab === 'ocr' && !textRegionPanel) setActiveTab('job');
     if (activeTab === 'revisions' && !pageRevisionPanel) setActiveTab('job');
-  }, [activeTab, pageRevisionPanel, textRegionPanel]);
+    if (activeTab === 'background' && !backgroundJobsPanel) setActiveTab('job');
+  }, [activeTab, backgroundJobsPanel, pageRevisionPanel, textRegionPanel]);
   useEffect(() => {
     if (!job || normalizeJobState(job).terminal) return;
     setClock(Date.now());
@@ -171,8 +204,16 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
   }
 
   const view = normalizeJobState(job);
+  const revisionPageNumbers = job.revision
+    ? job.revision.sourceImageIds.flatMap((sourceImageId) => {
+        const page = sourceImagePages.find((candidate) => candidate.sourceImageId === sourceImageId);
+        return page ? [page.sourceOrderIndex + 1] : [];
+      }).sort((left, right) => left - right)
+    : [];
   const duration = jobDurationMilliseconds(job.createdAt, job.updatedAt, view.terminal, clock);
   const failedChild = firstFailedChild(job);
+  const ocrLanguageResolution = job.result?.ocrLanguageResolution
+    ?? [...events].reverse().find((event) => event.type === 'ocr.language_resolution')?.payload;
   const cancel = async () => {
     setCanceling(true);
     setActionError(null);
@@ -201,13 +242,21 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
     } catch (error) { setActionError(error); }
     finally { setJobAction(null); }
   };
+  const changePageNumberVisibility = async (show: boolean) => {
+    if (!onShowPageNumbersChange) return;
+    setActionError(null);
+    try { await onShowPageNumbersChange(show); } catch (error) { setActionError(error); }
+  };
   const tabs: Array<{ id: WorkspaceTab; label: string; count?: number }> = [
     { id: 'job', label: t('workspaceTabJob') },
     { id: 'artifacts', label: t('workspaceTabArtifacts'), count: artifacts.length },
     { id: 'events', label: t('workspaceTabEvents'), count: events.length },
     ...(textRegionPanel ? [{ id: 'ocr' as const, label: t('workspaceTabOcr') }] : []),
     ...(pageRevisionPanel ? [{ id: 'revisions' as const, label: t('workspaceTabRevisions') }] : []),
+    ...(backgroundJobsPanel ? [{ id: 'background' as const, label: t('workspaceTabBackground'), count: backgroundTaskCount }] : []),
   ];
+  const visibleEvents = [...events].reverse().slice(0, visibleEventCount);
+  const hiddenEventCount = Math.max(0, events.length - visibleEvents.length);
   return (
     <div className="job-workspace">
       <div className="workspace-tab-list" role="tablist" aria-label={t('workspaceTabsLabel')}>
@@ -246,6 +295,12 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
           <div><dt>{t('jobIdLabel')}</dt><dd title={job.id}>{job.id}</dd></div>
           {job.revision && <div><dt>{t('rootJobIdLabel')}</dt><dd title={job.revision.rootJobId}>{job.revision.rootJobId}</dd></div>}
           {job.revision && <div><dt>{t('retranslationPageCountLabel')}</dt><dd>{job.revision.sourceImageIds.length}</dd></div>}
+          {job.revision && revisionPageNumbers.length > 0 && (
+            <div>
+              <dt>{t('retranslationPagesLabel')}</dt>
+              <dd>{revisionPageNumbers.map((pageNumber) => t('pageRevisionPage', String(pageNumber))).join(', ')}</dd>
+            </div>
+          )}
           {sourcePageUrl && <div><dt>{t('jobTargetUrlLabel')}</dt><dd title={sourcePageUrl}><a href={sourcePageUrl} target="_blank" rel="noreferrer">{sourcePageUrl}</a></dd></div>}
           <div><dt>{t('jobStageLabel')}</dt><dd>{job.stage || t('notAvailable')}</dd></div>
           <div><dt>{t('jobUpdatedLabel')}</dt><dd>{formatLocalDate(job.updatedAt)}</dd></div>
@@ -254,6 +309,7 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
         </dl>
         {view.waiting && <div className="notice notice-waiting">{t('jobWaitingDetail')}</div>}
         {job.outcome && <div className="notice notice-neutral">{t('jobOutcomeDetail', job.outcome)}</div>}
+        <OcrLanguageResolution value={ocrLanguageResolution} />
         {view.actionableError && <div className="notice notice-error" role="alert">{view.actionableError}</div>}
         {typeof job.diagnostics?.recommendedAction === 'string' && <div className="notice notice-neutral"><strong>{t('recommendedActionLabel')}</strong><span>{job.diagnostics.recommendedAction}</span></div>}
         {job.resumeMetadata?.resourceFailureType && <div className="notice notice-neutral">{t('resourceFailureType', job.resumeMetadata.resourceFailureType)}</div>}
@@ -265,6 +321,16 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
         )}
         <Diagnostics value={job.diagnostics} />
         <ErrorNotice error={actionError || monitorError} />
+        {onShowPageNumbersChange && (
+          <label className="checkbox-label page-number-visibility-toggle">
+            <input
+              type="checkbox"
+              checked={showPageNumbers}
+              onChange={(event) => void changePageNumberVisibility(event.target.checked)}
+            />
+            <span>{t('showPageNumbersLabel')}</span>
+          </label>
+        )}
         <div className="button-row">
           {!view.terminal && (
             <button className="secondary-button danger-button" type="button" disabled={canceling} onClick={() => void cancel()}>
@@ -285,6 +351,10 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
           )}
         </div>
       </section>
+      {qualityImprovementPanel?.({
+        openOcr: () => setActiveTab('ocr'),
+        openBackground: () => setActiveTab('background'),
+      })}
       </div>
 
       <div
@@ -333,11 +403,11 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
         {events.length > 0 && <p className="event-order-note">{t('eventsNewestFirst')}</p>}
         {events.length === 0 ? <div className="empty-state">{t('eventsEmpty')}</div> : (
           <ol className="event-list">
-            {[...events].reverse().map((event, index) => {
+            {visibleEvents.map((event, index) => {
               const eventView = presentJobEvent(event);
               const hasDetails = event.id !== undefined || Boolean(event.payload) || Boolean(event.job);
               return (
-                <li className={`event-${eventView.tone}`} key={`${event.createdAt}-${event.type}-${index}`}>
+                <li className={`event-${eventView.tone}`} key={event.id ?? `${event.createdAt}-${event.type}-${index}`}>
                   <span className="event-dot" />
                   <article className="event-card">
                     <header>
@@ -370,6 +440,13 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
             })}
           </ol>
         )}
+        {hiddenEventCount > 0 && (
+          <div className="event-list-actions">
+            <button className="secondary-button" type="button" onClick={() => setVisibleEventCount((current) => current + EVENT_PAGE_SIZE)}>
+              {t('showMoreEvents', String(Math.min(EVENT_PAGE_SIZE, hiddenEventCount)))}
+            </button>
+          </div>
+        )}
       </section>
       </div>
       {textRegionPanel && (
@@ -380,6 +457,11 @@ export function JobPanel({ client, jobId, job, events, artifacts, transport, mon
       {pageRevisionPanel && (
         <div className="workspace-tab-panel workspace-tab-panel-revisions" role="tabpanel" id="workspace-panel-revisions" aria-labelledby="workspace-tab-revisions" hidden={activeTab !== 'revisions'}>
           {pageRevisionPanel}
+        </div>
+      )}
+      {backgroundJobsPanel && (
+        <div className="workspace-tab-panel workspace-tab-panel-background" role="tabpanel" id="workspace-panel-background" aria-labelledby="workspace-tab-background" hidden={activeTab !== 'background'}>
+          {backgroundJobsPanel}
         </div>
       )}
     </div>

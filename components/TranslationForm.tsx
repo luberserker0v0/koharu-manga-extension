@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { BackendClient } from '../lib/api/backend-client';
 import type { TranslationProviderCatalog, TranslationProviderModel } from '../lib/api/types';
 import type { StoredBindings } from '../lib/storage/workflow';
-import { createQuickIdentifiers, type TranslationFormValues } from '../lib/domain/translation-request';
+import { createQuickIdentifiers, sourceLanguageList, type TranslationFormValues } from '../lib/domain/translation-request';
 import { languageLabel, languageOptions } from '../lib/domain/languages';
 import { t } from '../lib/i18n';
 import { ErrorNotice } from './ErrorNotice';
@@ -18,7 +18,7 @@ export function TranslationForm({ client, initial, busy, disabled, onSubmit }: {
   const [values, setValues] = useState<TranslationFormValues>({
     ...quickIdentifiers,
     targetLanguage: initial?.targetLanguage ?? 'zh-TW',
-    sourceLanguage: initial?.sourceLanguage ?? '',
+    sourceLanguage: sourceLanguageList(initial?.sourceLanguage),
     exportFormat: (initial?.exportFormat as TranslationFormValues['exportFormat'] | undefined) ?? 'rendered',
     translationMode: 'quick',
     translationProviderId: initial?.translationProviderId ?? '',
@@ -59,7 +59,7 @@ export function TranslationForm({ client, initial, busy, disabled, onSubmit }: {
     [providerLanguages, values.targetLanguage],
   );
   const sourceLanguages = useMemo(
-    () => languageOptions(providerLanguages, [values.sourceLanguage]),
+    () => languageOptions(providerLanguages, values.sourceLanguage),
     [providerLanguages, values.sourceLanguage],
   );
   const selectedChoice = modelsByProvider
@@ -78,8 +78,29 @@ export function TranslationForm({ client, initial, busy, disabled, onSubmit }: {
     setValues((current) => ({ ...current, translationProviderId, translationModelId }));
   };
 
-  const update = (key: keyof TranslationFormValues, value: string) => {
+  const update = (key: Exclude<keyof TranslationFormValues, 'sourceLanguage'>, value: string) => {
     setValues((current) => ({ ...current, [key]: value }));
+  };
+  const addSourceLanguage = (language: string) => {
+    if (!language || values.sourceLanguage.includes(language)) return;
+    setValues((current) => ({ ...current, sourceLanguage: [...current.sourceLanguage, language] }));
+  };
+  const moveSourceLanguage = (index: number, direction: -1 | 1) => {
+    setValues((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.sourceLanguage.length) return current;
+      const sourceLanguage = [...current.sourceLanguage];
+      const [moved] = sourceLanguage.splice(index, 1);
+      if (!moved) return current;
+      sourceLanguage.splice(target, 0, moved);
+      return { ...current, sourceLanguage };
+    });
+  };
+  const removeSourceLanguage = (language: string) => {
+    setValues((current) => ({
+      ...current,
+      sourceLanguage: current.sourceLanguage.filter((item) => item !== language),
+    }));
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -99,13 +120,31 @@ export function TranslationForm({ client, initial, busy, disabled, onSubmit }: {
               {targetLanguages.map((language) => <option key={language} value={language}>{languageLabel(language)}</option>)}
             </select>
           </label>
-          <label>
+          <div className="source-language-field">
             <span>{t('sourceLanguageLabel')}</span>
-            <select value={values.sourceLanguage} onChange={(event) => update('sourceLanguage', event.target.value)}>
-              <option value="">{t('sourceLanguageAutomatic')}</option>
-              {sourceLanguages.map((language) => <option key={language} value={language}>{languageLabel(language)}</option>)}
+            {values.sourceLanguage.length ? (
+              <ol className="source-language-order">
+                {values.sourceLanguage.map((language, index) => (
+                  <li key={language}>
+                    <span className="source-language-rank">{index === 0 ? t('sourceLanguagePrimary') : String(index + 1)}</span>
+                    <strong>{languageLabel(language)}</strong>
+                    <span className="source-language-actions">
+                      <button type="button" disabled={index === 0} aria-label={t('sourceLanguageMoveUp', languageLabel(language))} onClick={() => moveSourceLanguage(index, -1)}>↑</button>
+                      <button type="button" disabled={index === values.sourceLanguage.length - 1} aria-label={t('sourceLanguageMoveDown', languageLabel(language))} onClick={() => moveSourceLanguage(index, 1)}>↓</button>
+                      <button type="button" aria-label={t('sourceLanguageRemove', languageLabel(language))} onClick={() => removeSourceLanguage(language)}>×</button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : <p className="source-language-auto">{t('sourceLanguageAutomatic')}</p>}
+            <select value="" onChange={(event) => addSourceLanguage(event.target.value)}>
+              <option value="">{t('sourceLanguageAdd')}</option>
+              {sourceLanguages.filter((language) => !values.sourceLanguage.includes(language)).map((language) => (
+                <option key={language} value={language}>{languageLabel(language)}</option>
+              ))}
             </select>
-          </label>
+            <p className="field-help">{t('sourceLanguageOrderHelp')}</p>
+          </div>
           <label>
             <span>{t('exportFormatLabel')}</span>
             <select value={values.exportFormat} onChange={(event) => update('exportFormat', event.target.value)}>

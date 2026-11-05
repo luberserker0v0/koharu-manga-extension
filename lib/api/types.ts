@@ -6,6 +6,8 @@ export interface TranslationTarget {
   modelId: string;
 }
 
+export type SourceLanguageSelection = string | string[] | null;
+
 export interface TranslationProviderModel extends TranslationTarget {
   name: string;
   languages: string[];
@@ -46,6 +48,8 @@ export interface ReadinessService {
   status: string;
   mode?: string;
   baseUrl?: string | null;
+  providerId?: string | null;
+  providerName?: string | null;
 }
 
 export interface ReadinessResponse {
@@ -55,11 +59,11 @@ export interface ReadinessResponse {
   deploymentMode: string;
   services: {
     backend: ReadinessService;
-    koharu: ReadinessService;
+    mangaProcessor: ReadinessService;
     ao: ReadinessService;
   };
   capabilities: {
-    koharuJobs: boolean;
+    mangaProcessingJobs: boolean;
     aoJobs: boolean;
   };
   blockers: ReadinessIssue[];
@@ -75,7 +79,10 @@ export interface RuntimeServiceStatus {
 
 export interface RuntimeStatus {
   backend: RuntimeServiceStatus;
-  koharu: RuntimeServiceStatus;
+  mangaProcessor: RuntimeServiceStatus & {
+    providerId?: string | null;
+    providerName?: string | null;
+  };
   agent: RuntimeServiceStatus;
   quality?: Record<string, unknown>;
   translation?: Record<string, unknown>;
@@ -89,7 +96,7 @@ export interface UploadFileRecord {
 
 export interface UploadSession {
   uploadId: string;
-  kind: 'source' | 'reference';
+  kind: 'source' | 'reference' | 'ocr_review';
   status: 'uploading' | 'ready';
   files: UploadFileRecord[];
   createdAt: string;
@@ -137,14 +144,14 @@ export interface TranslationJobRequest {
   translatorId: string;
   chapterId: string;
   sourcePreflightId: string;
-  sourceLanguage?: string;
+  sourceLanguage?: SourceLanguageSelection;
 }
 
 export interface SelectiveRetranslationRequest {
   sourceImageIds: string[];
   translationTarget?: TranslationTarget;
   targetLanguage?: string;
-  sourceLanguage?: string;
+  sourceLanguage?: SourceLanguageSelection;
   instructions?: string;
 }
 
@@ -160,6 +167,8 @@ export type JobStatus =
   | 'queued'
   | 'waiting_dependency'
   | 'waiting_prerequisite'
+  | 'waiting_manga_processor_review'
+  /** Retained for inspecting Jobs created before the provider-neutral API. */
   | 'waiting_koharu_review'
   | 'running'
   | 'cancel_requested'
@@ -199,6 +208,10 @@ export interface JobResource {
   children?: JobResource[];
   events?: JobEvent[];
   artifacts?: JobArtifact[];
+}
+
+export interface JobsEnvelope {
+  jobs: JobResource[];
 }
 
 export interface JobEvent {
@@ -266,7 +279,7 @@ export interface PageRevision {
   jobId: string;
   parentJobId?: string | null;
   translationTarget?: TranslationTarget | null;
-  sourceLanguage?: string | null;
+  sourceLanguage?: SourceLanguageSelection;
   targetLanguage?: string | null;
   instructions?: string | null;
   createdAt: string;
@@ -350,19 +363,93 @@ export interface TextRegionCorrection {
   geometry?: TextRegionCorrectionGeometry;
 }
 
+export interface TextRegionUpdateOperation extends TextRegionCorrection {
+  type: 'update';
+}
+
+export interface TextRegionCreateOperation {
+  type: 'create';
+  clientOperationId: string;
+  sourceText: string;
+  geometry: TextRegionCorrectionGeometry;
+}
+
+export interface TextRegionDeleteOperation {
+  type: 'delete';
+  regionId: string;
+}
+
+export type TextRegionOperation =
+  | TextRegionUpdateOperation
+  | TextRegionCreateOperation
+  | TextRegionDeleteOperation;
+
 export interface TextRegionPageCorrection {
   sourceImageId: string;
   baseRegionSetRevisionId: string;
-  regions: TextRegionCorrection[];
+  operations: TextRegionOperation[];
 }
 
 export interface TextRegionCorrectionRequest {
   pages: TextRegionPageCorrection[];
   translationTarget?: TranslationTarget;
-  sourceLanguage?: string;
+  sourceLanguage?: SourceLanguageSelection;
   targetLanguage?: string;
   instructions?: string;
   generationOptions?: Record<string, unknown>;
+}
+
+export interface TextRegionReviewRegion {
+  box: [number, number, number, number];
+  text: string;
+}
+
+export interface TextRegionReviewRequest {
+  sourceImageId: string;
+  baseRegionSetRevisionId: string;
+}
+
+export interface TextRegionReviewResult {
+  count: number;
+  regions: TextRegionReviewRegion[];
+}
+
+export interface TextRegionReviewApplyRequest extends TextRegionReviewRequest, TextRegionReviewResult {}
+
+export interface OcrTextReviewItemRequest {
+  clientItemId: string;
+  fileName: string;
+  ocrText: string;
+  contextBefore?: string;
+  contextAfter?: string;
+}
+
+export interface OcrTextReviewJobRequest {
+  uploadId: string;
+  sourceLanguages?: string[];
+  items: OcrTextReviewItemRequest[];
+}
+
+export interface OcrTextReviewResultItem {
+  clientItemId: string;
+  originalText: string;
+  correctedText: string;
+  changed: boolean;
+  status: 'succeeded' | 'failed';
+  error?: string;
+  code?: string | null;
+}
+
+export interface OcrTextReviewJobResult {
+  uploadId: string;
+  sourceLanguages: string[];
+  items: OcrTextReviewResultItem[];
+  summary: {
+    total: number;
+    succeededCount: number;
+    failedCount: number;
+    changedCount: number;
+  };
 }
 
 export interface UploadProgress {
@@ -379,6 +466,7 @@ export interface UploadProgress {
 export interface ApiSettings {
   baseUrl: string;
   token: string;
+  showPageNumbers: boolean;
   comicCrawler: ComicCrawlerSettings;
 }
 

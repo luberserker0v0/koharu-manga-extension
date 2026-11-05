@@ -1,16 +1,16 @@
 import {
   BrowserClient,
   BrowserClientError,
-  ExistingTabExecutor,
-  WebExtensionTabDriver,
+  DriverBrowserExecutor,
+  ExistingTabAcquisitionStrategy,
   type BrowserClientConnection,
   type BrowserClientOptions,
   type BrowserResourceDescriptor,
-  type WebExtensionApi,
 } from '@comiccrawler/browser-client-sdk';
 import type { ComicCrawlerSettings } from '../api/types';
 import { normalizeServiceBaseUrl } from '../api/url';
 import { ChromeClientStateStore, type ExtensionStorageArea } from './browser-state-store';
+import { WebExtensionTabDriver, type WebExtensionApi } from './web-extension-tab-driver';
 
 export const BROWSER_RESOURCE_KEY = 'comiccrawler.approvedTabResource';
 export const BROWSER_CONNECTION_ENABLED_KEY = 'comiccrawler.connectionEnabled';
@@ -42,6 +42,12 @@ type ClientFactory = (options: BrowserClientOptions) => BrowserClientLike;
 
 function clientErrorCode(error: unknown): string {
   return error instanceof BrowserClientError ? error.code : 'BROWSER_CLIENT_UNAVAILABLE';
+}
+
+function shouldRefreshEnrollment(error: unknown): boolean {
+  return error instanceof BrowserClientError
+    && error.code === 'INVALID_STATE'
+    && /(?:not enrolled|state belongs to a different server|credential is invalid)/i.test(error.message);
 }
 
 function accessiblePageUrl(value: string | undefined): string {
@@ -79,9 +85,8 @@ export class ComicCrawlerBrowserClientManager {
     const serverUrl = normalizeServiceBaseUrl(settings.baseUrl);
     if (this.client && this.serverUrl === serverUrl) return this.client;
     if (this.client) await this.client.disconnect().catch(() => undefined);
-    const executor = new ExistingTabExecutor(
-      new WebExtensionTabDriver(browser as unknown as WebExtensionApi),
-    );
+    const driver = new WebExtensionTabDriver(browser as unknown as WebExtensionApi);
+    const executor = new DriverBrowserExecutor(driver, new ExistingTabAcquisitionStrategy(driver));
     this.client = this.createClient({
       serverUrl,
       executor,
@@ -222,7 +227,17 @@ export class ComicCrawlerBrowserClientManager {
     if (typeof tab.id !== 'number') throw new Error('current_tab_inaccessible');
     const url = accessiblePageUrl(tab.url);
     if (!await this.stateStore.get()) await this.enroll(settings);
-    await this.connect(settings);
+    try {
+      await this.connect(settings);
+    } catch (error) {
+      if (!shouldRefreshEnrollment(error)) throw error;
+      // Server upgrades, URL changes, or a restored browser profile can leave
+      // an opaque SDK enrollment that can no longer authenticate. Replace it
+      // once; translation jobs are not retried by this transport recovery.
+      await this.clear();
+      await this.enroll(settings);
+      await this.connect(settings);
+    }
     const current = await this.readResource();
     if (current?.tabId === tab.id && current.url === url) return await this.snapshot();
     return await this.registerTab({ ...tab, url });

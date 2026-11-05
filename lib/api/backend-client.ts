@@ -4,9 +4,11 @@ import type {
   ApiSettings,
   ArtifactsEnvelope,
   EventsEnvelope,
+  JobsEnvelope,
   HealthResponse,
   JobArtifact,
   JobResource,
+  OcrTextReviewJobRequest,
   PageRevision,
   PageRevisionManifest,
   PageRevisionSelection,
@@ -15,6 +17,9 @@ import type {
   SelectiveRetranslationRequest,
   SourcePreflight,
   TextRegionCorrectionRequest,
+  TextRegionReviewApplyRequest,
+  TextRegionReviewRequest,
+  TextRegionReviewResult,
   TextRegionSnapshot,
   TranslationJobRequest,
   TranslatedImage,
@@ -212,11 +217,11 @@ export class BackendClient {
   }
 
   getTranslationProviders(signal?: AbortSignal): Promise<TranslationProviderCatalog> {
-    return this.json('/runtime/koharu/translation-providers', { signal });
+    return this.json('/runtime/manga-processor/translation-providers', { signal });
   }
 
-  createUpload(signal?: AbortSignal): Promise<UploadSession> {
-    return this.json('/uploads', { method: 'POST', body: { kind: 'source' }, signal });
+  createUpload(signal?: AbortSignal, kind: UploadSession['kind'] = 'source'): Promise<UploadSession> {
+    return this.json('/uploads', { method: 'POST', body: { kind }, signal });
   }
 
   getUpload(uploadId: string, signal?: AbortSignal): Promise<UploadSession> {
@@ -395,8 +400,43 @@ export class BackendClient {
     });
   }
 
+  reviewTextRegions(
+    parentJobId: string,
+    payload: TextRegionReviewRequest,
+    signal?: AbortSignal,
+  ): Promise<TextRegionReviewResult> {
+    return this.json(`/jobs/${encodeURIComponent(parentJobId)}/text-region-reviews`, {
+      method: 'POST',
+      body: payload,
+      signal,
+    });
+  }
+
+  createOcrTextReviewJob(
+    payload: OcrTextReviewJobRequest,
+    signal?: AbortSignal,
+  ): Promise<JobResource> {
+    return this.json('/jobs/ocr-text-review', { method: 'POST', body: payload, signal });
+  }
+
+  applyTextRegionReview(
+    parentJobId: string,
+    payload: TextRegionReviewApplyRequest,
+    signal?: AbortSignal,
+  ): Promise<JobResource> {
+    return this.json(`/jobs/${encodeURIComponent(parentJobId)}/text-region-reviews/apply`, {
+      method: 'POST',
+      body: payload,
+      signal,
+    });
+  }
+
   getJob(jobId: string, signal?: AbortSignal): Promise<JobResource> {
     return this.json(`/jobs/${encodeURIComponent(jobId)}`, { signal });
+  }
+
+  getJobs(signal?: AbortSignal): Promise<JobsEnvelope> {
+    return this.json('/jobs', { signal });
   }
 
   cancelJob(jobId: string, signal?: AbortSignal): Promise<JobResource> {

@@ -1,14 +1,21 @@
 import type {
   TextRegion,
-  TextRegionCorrection,
+  TextRegionCreateOperation,
   TextRegionCorrectionGeometry,
+  TextRegionOperation,
   TextRegionPage,
   TextRegionPageCorrection,
+  TextRegionUpdateOperation,
 } from '../api/types';
 
 export interface TextRegionDraft {
   sourceText: string;
   geometry: TextRegionCorrectionGeometry;
+}
+
+export interface CreatedTextRegionDraft extends TextRegionDraft {
+  sourceImageId: string;
+  clientOperationId: string;
 }
 
 export function textRegionDraftKey(sourceImageId: string, regionId: string): string {
@@ -30,12 +37,13 @@ function geometryChanged(region: TextRegion, geometry: TextRegionCorrectionGeome
     || (geometry.rotation ?? 0) !== region.geometry.rotation;
 }
 
-export function correctionFromDraft(region: TextRegion, draft: TextRegionDraft): TextRegionCorrection | null {
+export function correctionFromDraft(region: TextRegion, draft: TextRegionDraft): TextRegionUpdateOperation | null {
   const sourceTextChanged = draft.sourceText !== region.sourceText;
   const changedGeometry = geometryChanged(region, draft.geometry);
   if (!sourceTextChanged && !changedGeometry) return null;
-  if (sourceTextChanged && !draft.sourceText.length) throw new Error('text_region_source_text_required');
+  if (sourceTextChanged && !draft.sourceText.trim()) throw new Error('text_region_source_text_required');
   return {
+    type: 'update',
     regionId: region.id,
     ...(sourceTextChanged ? { sourceText: draft.sourceText } : {}),
     ...(changedGeometry ? { geometry: { ...draft.geometry } } : {}),
@@ -54,19 +62,38 @@ export function validateTextRegionDraft(page: TextRegionPage, draft: TextRegionD
 export function buildTextRegionPageCorrections(
   pages: TextRegionPage[],
   drafts: ReadonlyMap<string, TextRegionDraft>,
+  createdDrafts: ReadonlyMap<string, CreatedTextRegionDraft> = new Map(),
+  deletedRegionKeys: ReadonlySet<string> = new Set(),
 ): TextRegionPageCorrection[] {
   return pages.flatMap((page) => {
-    const regions = page.regions.flatMap((region) => {
-      const draft = drafts.get(textRegionDraftKey(page.sourceImageId, region.id));
-      if (!draft) return [];
+    const operations: TextRegionOperation[] = [];
+    for (const region of page.regions) {
+      const key = textRegionDraftKey(page.sourceImageId, region.id);
+      if (deletedRegionKeys.has(key)) {
+        operations.push({ type: 'delete', regionId: region.id });
+        continue;
+      }
+      const draft = drafts.get(key);
+      if (!draft) continue;
       validateTextRegionDraft(page, draft);
       const correction = correctionFromDraft(region, draft);
-      return correction ? [correction] : [];
-    });
-    return regions.length ? [{
+      if (correction) operations.push(correction);
+    }
+    for (const draft of createdDrafts.values()) {
+      if (draft.sourceImageId !== page.sourceImageId) continue;
+      validateTextRegionDraft(page, draft);
+      if (!draft.sourceText.trim()) throw new Error('text_region_source_text_required');
+      operations.push({
+        type: 'create',
+        clientOperationId: draft.clientOperationId,
+        sourceText: draft.sourceText,
+        geometry: { ...draft.geometry },
+      } satisfies TextRegionCreateOperation);
+    }
+    return operations.length ? [{
       sourceImageId: page.sourceImageId,
       baseRegionSetRevisionId: page.regionSetRevisionId,
-      regions,
+      operations,
     }] : [];
   });
 }

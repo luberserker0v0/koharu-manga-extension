@@ -1,22 +1,30 @@
-# ComicCrawler Browser Client v0.2.0
+# ComicCrawler Browser Client protocol v4
 
-The extension uses the published `@comiccrawler/browser-client-sdk` package in
-`existing-tab` mode. It does not implement the Browser Client protocol itself.
+The extension uses ComicCrawler's generated `@comiccrawler/browser-client-sdk`
+artifact in `existing-tab` mode. It does not implement the Browser Client
+protocol itself. ComicCrawler does not need to publish a GitHub Release for
+every feature; development uses the locally built container and SDK artifact.
 
 ## Install the SDK
 
-1. Run:
+1. Build ComicCrawler locally and locate the SDK artifact under
+   `.artifacts/local-sdk/{commit}/`.
+2. Verify that `{commit}` matches the container's
+   `org.opencontainers.image.revision` label, or that both commits have the same
+   Git tree.
+3. Install it without rewriting the extension's portable lockfile, for example:
 
    ```sh
-   npm install https://github.com/luberserker0v0/comic-crawler/releases/download/v0.2.0/comiccrawler-browser-client-sdk-0.2.0.tgz
+   npm install --no-save --package-lock=false D:/program/Projects/ComicCrawler/repo/.artifacts/local-sdk/d9c4748/comiccrawler-browser-client-sdk-0.5.0.tgz
    ```
 
-2. Do not copy SDK source or protocol types into the extension.
-3. Do not add Playwright to the extension.
+4. Do not copy SDK source or protocol types into the extension.
+5. Do not add Playwright to the extension.
 
 ## Start ComicCrawler
 
-1. Start ComicCrawler v0.2.0.
+1. Start a locally built ComicCrawler whose revision matches the reviewed
+   GitHub API contract.
 2. Confirm `http://127.0.0.1:4100/api/status` responds.
 3. Confirm `http://127.0.0.1:4100/.well-known/comiccrawler-browser-client` responds.
 4. Enable API CORS for the installed extension origin when required.
@@ -54,6 +62,14 @@ Resource ID. Closing the tab revokes the local binding. A URL change also
 revokes it, except for a same-origin redirect while an approved task is active;
 that exception lets challenge pages return to the original chapter in the same
 tab. A future task still requires the current URL to match its approval.
+
+ComicCrawler protocol v4 prepares long readers incrementally. The Server sends
+one bounded `page.prepare.start`, repeated `page.prepare.step` commands while
+progress continues, and one `page.prepare.finish` that restores the saved scroll
+positions. The extension's page driver retains the SDK operation between those
+commands. It does not impose another total-duration timeout on chapter-image
+extraction; user cancellation still aborts the REST request and triggers SDK
+cleanup.
 
 ## Human-verification handoff
 
@@ -106,4 +122,7 @@ The extension does not request unrestricted `<all_urls>` access.
 - **Approved resource unavailable**: the tab closed, navigated, or its resource
   could not be restored. Open the exact chapter URL and retry the translation.
 - **Credential rejected**: verify the Browser Client user ID/token in settings and retry translation.
+- **Protocol mismatch**: v0.5.0 must report `protocolVersion: 4` from
+  `/.well-known/comiccrawler-browser-client`. Pulling a newer image is not
+  enough when an older container is still running; recreate that service.
 

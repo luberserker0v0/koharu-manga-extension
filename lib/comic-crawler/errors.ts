@@ -25,9 +25,22 @@ export class ChapterImagesVerificationRequiredError extends ComicCrawlerError {
 export function safeCrawlerError(error: unknown): string {
   if (error instanceof ChapterImagesVerificationRequiredError) return 'comicCrawler_verification_required';
   if (error instanceof Error) {
+    if (/unsupported Browser Client protocol/i.test(error.message)) {
+      return 'comicCrawler_browser_protocol';
+    }
+    if (/(?:Browser Client credential is invalid|Browser Client is not enrolled|Browser Client state belongs to a different server)/i.test(error.message)) {
+      return 'comicCrawler_browser_enrollment';
+    }
+    if (/Browser Client.*(?:WebSocket|connection).*(?:failed|closed|timed out)/i.test(error.message)) {
+      return 'comicCrawler_browser_connection';
+    }
     if (/^(?:Error:\s*)?comicCrawler_browser_target_required$/.test(error.message)
       || /browser (?:resource|worker).*(?:not found|not registered|offline|disconnect)/i.test(error.message)) {
       return 'comicCrawler_browser_target_required';
+    }
+    if (/browser command .*tim(?:ed|e)[ -]?out/i.test(error.message)
+      || /reader preparation (?:stopped making progress|exceeded its operation deadline)/i.test(error.message)) {
+      return 'comicCrawler_browser_timeout';
     }
     if ((error instanceof ComicCrawlerError && error.code === 'timeout') || /tim(?:ed|e)[ -]?out/i.test(error.message)) {
       return 'comicCrawler_timeout';
